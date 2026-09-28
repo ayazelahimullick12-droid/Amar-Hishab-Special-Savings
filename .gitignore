@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+Thumbs.db
+
+# Unrelated prototype (Agami) that happens to live in this same folder —
+# not part of the Amar Hishab Special Savings (AHSS) repo.
+agami.html
+assets/

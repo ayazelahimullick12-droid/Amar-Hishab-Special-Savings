@@ -1,0 +1,12 @@
+{
+  "name": "ahss-prototype",
+  "version": "1.0.0",
+  "description": "AHSS (Amar Hishab Shadharon Sonchoy) click-through prototype for BRAC Microfinance — DCS mobile app and ERP web screens.",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,227 @@
+{
+  "projects": [
+    { "code": "DABI", "id": 15, "label": "DABI (15)" },
+    { "code": "Progoti", "id": 60, "label": "Progoti (60)" },
+    { "code": "Progoti", "id": 225, "label": "Progoti (225)" },
+    { "code": "BCUP", "id": 279, "label": "BCUP (279)" },
+    { "code": "NCDP", "id": 104, "label": "NCDP (104)" },
+    { "code": "SCDP", "id": 351, "label": "SCDP (351)" },
+    { "code": "CSP", "id": 1326, "label": "CSP (1326)" },
+    { "code": "AMV", "id": 1375, "label": "AMV (1375)" }
+  ],
+  "approvalAuthority": {
+    "DABI": "BM/ABM (AM if unavailable)",
+    "Progoti": "AM/AAM",
+    "BCUP": "Equivalent supervisor",
+    "NCDP": "Equivalent supervisor",
+    "SCDP": "Equivalent supervisor",
+    "CSP": "Equivalent supervisor",
+    "AMV": "Equivalent supervisor"
+  },
+  "relationshipOptions": ["Spouse", "Son", "Daughter", "Father", "Mother", "Brother", "Sister", "Other"],
+  "savingsProducts": ["General Savings", "Special Savings"],
+  "reasonOptions": [
+    "Confirmed with client via phone",
+    "Confirmed with client via branch visit",
+    "Client requested change",
+    "Unable to reach client",
+    "Other"
+  ],
+  "members": [
+    { "memberNo": "MEM-100234", "erpMemberNo": "ERP-45231", "name": "Rahima Begum", "category": "General", "mobile": "01711223344", "project": "DABI", "branch": "Mirpur-2" },
+    { "memberNo": "MEM-100511", "erpMemberNo": "ERP-45890", "name": "Salma Khatun", "category": "General", "mobile": "01822334455", "project": "Progoti", "branch": "Savar" },
+    { "memberNo": "MEM-100788", "erpMemberNo": "ERP-46012", "name": "Nasima Akter", "category": "General", "mobile": "01933445566", "project": "DABI", "branch": "Mirpur-2" },
+    { "memberNo": "MEM-101020", "erpMemberNo": "ERP-46550", "name": "Rina Islam", "category": "General", "mobile": "01644556677", "project": "BCUP", "branch": "Cumilla Sadar" },
+    { "memberNo": "MEM-101250", "erpMemberNo": "ERP-47102", "name": "Ayesha Siddika", "category": "General", "mobile": "01755667788", "project": "DABI", "branch": "Mirpur-2" },
+    { "memberNo": "MEM-101477", "erpMemberNo": "ERP-47820", "name": "Moriom Jahan", "category": "Micro Enterprise", "mobile": "01966778899", "project": "Progoti", "branch": "Savar" }
+  ],
+  "accounts": [
+    {
+      "accountNo": "AHSS-000123",
+      "memberNo": "MEM-100234",
+      "accountName": "Rahima Begum",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "product": "General Savings",
+      "accountType": "Single",
+      "status": "Approved",
+      "balance": 8450,
+      "openingDate": "2026-03-10",
+      "nominee": { "name": "Karim Mia", "relationship": "Spouse", "dob": "1978-05-14", "nid": "1985674123456", "percentage": 100 },
+      "autoDebit": { "loanInstallment": true, "savingsInstallment": false },
+      "transactions": [
+        { "date": "2026-03-10", "description": "Account opening deposit", "debit": 0, "credit": 500, "balance": 500 },
+        { "date": "2026-04-05", "description": "Loan disbursement credit", "debit": 0, "credit": 5000, "balance": 5500 },
+        { "date": "2026-04-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 5050 },
+        { "date": "2026-05-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 4600 },
+        { "date": "2026-06-15", "description": "Member cash deposit", "debit": 0, "credit": 2000, "balance": 6600 },
+        { "date": "2026-06-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 6150 },
+        { "date": "2026-07-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 5700 },
+        { "date": "2026-08-10", "description": "Member cash deposit", "debit": 0, "credit": 3200, "balance": 8900 },
+        { "date": "2026-08-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 8450 }
+      ]
+    },
+    {
+      "accountNo": "AHSS-000156",
+      "memberNo": "MEM-100511",
+      "accountName": "Salma Khatun",
+      "project": "Progoti",
+      "branch": "Savar",
+      "product": "Special Savings",
+      "accountType": "Single",
+      "status": "Approved",
+      "balance": 15200,
+      "openingDate": "2026-02-02",
+      "nominee": { "name": "Jamal Uddin", "relationship": "Son", "dob": "2002-11-02", "nid": "1998774123456", "percentage": 100 },
+      "autoDebit": { "loanInstallment": true, "savingsInstallment": true, "dpsInstallment": true },
+      "autoCredit": { "monthlyProfit": true, "maturityAmount": true },
+      "transactions": [
+        { "date": "2026-02-02", "description": "Account opening deposit", "debit": 0, "credit": 1000, "balance": 1000 },
+        { "date": "2026-03-02", "description": "DPS installment auto debit", "debit": 1500, "credit": 0, "balance": -500 },
+        { "date": "2026-03-05", "description": "Member cash deposit", "debit": 0, "credit": 6000, "balance": 5500 },
+        { "date": "2026-04-02", "description": "DPS installment auto debit", "debit": 1500, "credit": 0, "balance": 4000 },
+        { "date": "2026-04-28", "description": "Monthly profit autocredit", "debit": 0, "credit": 320, "balance": 4320 },
+        { "date": "2026-05-02", "description": "DPS installment auto debit", "debit": 1500, "credit": 0, "balance": 2820 },
+        { "date": "2026-06-10", "description": "Member cash deposit", "debit": 0, "credit": 10000, "balance": 12820 },
+        { "date": "2026-07-02", "description": "DPS installment auto debit", "debit": 1500, "credit": 0, "balance": 11320 },
+        { "date": "2026-07-28", "description": "Monthly profit autocredit", "debit": 0, "credit": 380, "balance": 11700 },
+        { "date": "2026-08-02", "description": "DPS installment auto debit", "debit": 1500, "credit": 0, "balance": 10200 },
+        { "date": "2026-08-30", "description": "Member cash deposit", "debit": 0, "credit": 5000, "balance": 15200 }
+      ]
+    },
+    {
+      "accountNo": "AHSS-000201",
+      "memberNo": "MEM-101250",
+      "accountName": "Ayesha Siddika",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "product": "General Savings",
+      "accountType": "Single",
+      "status": "Approved",
+      "balance": 1200,
+      "openingDate": "2026-09-26",
+      "nominee": { "name": "Yasin Ali", "relationship": "Spouse", "dob": "1980-01-20", "nid": "1980123456789", "percentage": 100 },
+      "autoDebit": { "loanInstallment": false, "savingsInstallment": false },
+      "transactions": [
+        { "date": "2026-09-26", "description": "Account opening deposit", "debit": 0, "credit": 1200, "balance": 1200 }
+      ]
+    }
+  ],
+  "ahssRequests": [
+    {
+      "id": "REQ-2001",
+      "memberNo": "MEM-100788",
+      "memberName": "Nasima Akter",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "requestType": "AHSS Account Opening",
+      "proposedBy": "CDO - Jasim Uddin",
+      "dcsApprovedBy": "",
+      "requestDate": "2026-09-20",
+      "status": "Pending DCS Approval",
+      "formData": {
+        "projectLabel": "DABI (15)",
+        "memberNo": "MEM-100788",
+        "erpMemberNo": "ERP-46012",
+        "memberName": "Nasima Akter",
+        "memberCategory": "General",
+        "mobile": "01933445566",
+        "accountType": "Single",
+        "otpSendsTo": "Self",
+        "nominee": { "name": "Rafiqul Islam", "relationship": "Spouse", "dob": "1982-06-11", "nid": "1982334455667", "birthCert": "", "passport": "", "smartCard": "", "percentage": "100" },
+        "accountName": "Nasima Akter",
+        "savingsProduct": "General Savings",
+        "consent": true
+      }
+    },
+    {
+      "id": "REQ-2002",
+      "memberNo": "MEM-101020",
+      "memberName": "Rina Islam",
+      "project": "BCUP",
+      "branch": "Cumilla Sadar",
+      "requestType": "AHSS Account Opening",
+      "proposedBy": "CO - Habibur Rahman",
+      "dcsApprovedBy": "Branch Manager - Farida Yasmin",
+      "requestDate": "2026-09-18",
+      "status": "Pending ERP Approval",
+      "formData": {
+        "projectLabel": "BCUP (279)",
+        "memberNo": "MEM-101020",
+        "erpMemberNo": "ERP-46550",
+        "memberName": "Rina Islam",
+        "memberCategory": "General",
+        "mobile": "01644556677",
+        "accountType": "Single",
+        "otpSendsTo": "Self",
+        "nominee": { "name": "Nurul Amin", "relationship": "Father", "dob": "1955-02-19", "nid": "1955223344556", "birthCert": "", "passport": "", "smartCard": "", "percentage": "100" },
+        "accountName": "Rina Islam",
+        "savingsProduct": "General Savings",
+        "consent": true
+      }
+    },
+    {
+      "id": "REQ-2003",
+      "memberNo": "MEM-101250",
+      "memberName": "Ayesha Siddika",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "requestType": "AHSS Account Opening",
+      "proposedBy": "CDO - Jasim Uddin",
+      "dcsApprovedBy": "ABM - Kamal Hossain",
+      "requestDate": "2026-09-25",
+      "status": "Approved",
+      "linkedAccountNo": "AHSS-000201",
+      "formData": {
+        "projectLabel": "DABI (15)",
+        "memberNo": "MEM-101250",
+        "erpMemberNo": "ERP-47102",
+        "memberName": "Ayesha Siddika",
+        "memberCategory": "General",
+        "mobile": "01755667788",
+        "accountType": "Single",
+        "otpSendsTo": "Self",
+        "nominee": { "name": "Yasin Ali", "relationship": "Spouse", "dob": "1980-01-20", "nid": "1980123456789", "birthCert": "", "passport": "", "smartCard": "", "percentage": "100" },
+        "accountName": "Ayesha Siddika",
+        "savingsProduct": "General Savings",
+        "consent": true
+      }
+    }
+  ],
+  "continuationRequests": [
+    {
+      "id": "CR-3001",
+      "memberNo": "MEM-100234",
+      "memberName": "Rahima Begum",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "accountNo": "AHSS-000123",
+      "product": "Loan Installment Auto Debit",
+      "action": "Discontinue",
+      "reason": "Client requested cash collection due to a mobile banking issue on her account.",
+      "proposedBy": "CDO - Jasim Uddin",
+      "requestDate": "2026-09-22",
+      "status": "Pending DCS Approval",
+      "dcsApprovedBy": "",
+      "verification": "",
+      "comment": ""
+    },
+    {
+      "id": "CR-3002",
+      "memberNo": "MEM-100511",
+      "memberName": "Salma Khatun",
+      "project": "Progoti",
+      "branch": "Savar",
+      "accountNo": "AHSS-000156",
+      "product": "Special Savings – DPS Installment Autodebit",
+      "action": "Continue",
+      "reason": "Renewal confirmation after DPS tenure review.",
+      "proposedBy": "CO - Habibur Rahman",
+      "requestDate": "2026-09-15",
+      "status": "Pending ERP Approval",
+      "dcsApprovedBy": "AM - Nasrin Sultana",
+      "verification": "Both",
+      "comment": "Confirmed with client via phone and branch visit. Client wants the DPS auto debit to continue as before."
+    }
+  ]
+}
