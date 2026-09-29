@@ -22,7 +22,6 @@ const ui = {
   // or a stub tile id); dcs.screen/params describe where inside that module.
   dcs: { mod: 'home', screen: 'home', params: {} },
   dcsHistory: [],
-  demoFlow: 'loan',
   erpMenu: 'savings',
   erpSavingsBranch: 'ahss', // 'ahss' | 'special'
   erpTab: 'b2',
@@ -106,10 +105,13 @@ function computePremium(monthly, tenureYears, policyType){
 function persist(){
   try{
     localStorage.setItem('ahss_proto_state', JSON.stringify({
+      members: DB.members,
       accounts: DB.accounts,
       ahssRequests: DB.ahssRequests,
       continuationRequests: DB.continuationRequests,
-      specialSavingsApplications: DB.specialSavingsApplications
+      specialSavingsApplications: DB.specialSavingsApplications,
+      specialSavingsAccounts: DB.specialSavingsAccounts,
+      loanApplications: DB.loanApplications
     }));
   }catch(e){ /* private mode / storage unavailable — state just won't survive reload */ }
 }
@@ -143,10 +145,13 @@ async function boot(){
     DB = await loadSeedData();
     const overlay = loadOverlay();
     if(overlay){
+      if(overlay.members) DB.members = overlay.members;
       if(overlay.accounts) DB.accounts = overlay.accounts;
       if(overlay.ahssRequests) DB.ahssRequests = overlay.ahssRequests;
       if(overlay.continuationRequests) DB.continuationRequests = overlay.continuationRequests;
       if(overlay.specialSavingsApplications) DB.specialSavingsApplications = overlay.specialSavingsApplications;
+      if(overlay.specialSavingsAccounts) DB.specialSavingsAccounts = overlay.specialSavingsAccounts;
+      if(overlay.loanApplications) DB.loanApplications = overlay.loanApplications;
     }
     document.getElementById('loadingMsg').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
@@ -407,9 +412,9 @@ const DCS_TILES_FIELD = [
   { id: 'dashboard', label: 'Dashboard', ic: '▦', stub: true },
   { id: 'volist', label: 'VO List', ic: '👥', stub: true },
   { id: 'survey', label: 'Survey', ic: '📋', stub: true },
-  { id: 'admission', label: 'Admission', ic: '🪪', stub: true },
+  { id: 'admission', label: 'Admission', ic: '🪪', stub: false },
   { id: 'profile', label: 'Profile Update', ic: '👤', stub: true },
-  { id: 'loan', label: 'Loan', ic: '📝', stub: true },
+  { id: 'loan', label: 'Loan', ic: '📝', stub: false },
   { id: 'insurance', label: 'Insurance Application', ic: '🛡', stub: true },
   { id: 'ss', label: 'Special Savings Application', ic: '💰', stub: false },
   { id: 'ahss', label: 'AHSS', ic: '🏦', stub: false },
@@ -455,8 +460,10 @@ function dcsBodyContent(){
   if(v.mod === 'home') return dcsHomeDashboard();
   if(v.mod === 'ahss') return dcsAhssModule(v);
   if(v.mod === 'ss') return dcsSsModule(v);
+  if(v.mod === 'admission') return dcsAdmissionModule(v);
+  if(v.mod === 'loan') return dcsLoanModule(v);
   const tile = dcsTilesForRole().find(t => t.id === v.mod);
-  return `<div class="dcs-empty">${esc(tile ? tile.label : 'This screen')} is not part of this prototype.<br><br>Only <b>Special Savings Application</b> and <b>AHSS</b> are fully built out here.</div>`;
+  return `<div class="dcs-empty">${esc(tile ? tile.label : 'This screen')} is not part of this prototype.<br><br>Special Savings Application, AHSS, Admission and Loan are fully built out here.</div>`;
 }
 
 function dcsHomeDashboard(){
@@ -484,12 +491,14 @@ function dcsWireScreen(){
   if(v.mod === 'ahss' && v.screen === 'form') wireDcsEnrollForm(v);
   if(v.mod === 'ahss' && v.screen === 'autodcForm') wireDcsAutoDcForm(v);
   if(v.mod === 'ss' && v.screen === 'wizard') wireSsWizard(v);
+  if(v.mod === 'admission' && v.screen === 'form') wireAdmissionForm(v);
+  if(v.mod === 'loan' && v.screen === 'form') wireLoanForm(v);
 }
 
 /* ==========================================================================
    MODULE: AHSS (re-platformed onto the DCS Home shell — list + detail,
-   no bottom nav; auto debit/credit, account view and the "AHSS inside other
-   flows" demo all nest inside this module instead of being separate tabs)
+   no bottom nav; auto debit/credit and account view nest inside this
+   module instead of being separate tabs)
    ========================================================================== */
 function dcsAhssModule(v){
   if(v.screen === 'form') return dcsEnrollForm(v.params);
@@ -498,15 +507,13 @@ function dcsAhssModule(v){
   if(v.screen === 'autodcForm') return dcsAutoDcForm(v.params);
   if(v.screen === 'autodcDetail') return dcsAutoDcDetail(v.params);
   if(v.screen === 'account') return dcsScreenAccount(v.params);
-  if(v.screen === 'demo') return dcsScreenDemo();
   return dcsAhssHome();
 }
 
 function dcsAhssMenu(){
   const items = ui.dcsRole === 'field'
     ? [['Auto Debit/Credit requests', "dcsNavigate({mod:'ahss',screen:'autodcHome',params:{}})"],
-       ['View an AHSS account', "dcsNavigate({mod:'ahss',screen:'account',params:{}})"],
-       ['Demo: AHSS in other flows', "dcsNavigate({mod:'ahss',screen:'demo',params:{}})"]]
+       ['View an AHSS account', "dcsNavigate({mod:'ahss',screen:'account',params:{}})"]]
     : [['Auto Debit/Credit approvals', "dcsNavigate({mod:'ahss',screen:'autodcHome',params:{}})"],
        ['View an AHSS account', "dcsNavigate({mod:'ahss',screen:'account',params:{}})"]];
   return `
@@ -899,25 +906,41 @@ function accountFlagValue(a, key){
   if(key in (a.autoCredit||{})) return a.autoCredit[key];
   return false;
 }
+/* Auto debit/credit applies to two kinds of accounts: an AHSS account
+   itself (loan/savings installment) and a Special Savings account that is
+   LINKED to an AHSS account (monthly profit / maturity / DPS installment
+   flow through that AHSS account per FR-11/FR-12) — these flags live on
+   the Special Savings account, not on the AHSS account, since they
+   describe a different product's behavior. */
+function findAutoDcAccount(kind, accountNo){
+  return kind === 'specialSavings' ? DB.specialSavingsAccounts.find(x=>x.accountNo===accountNo) : DB.accounts.find(x=>x.accountNo===accountNo);
+}
 function dcsAutoDcHomeField(){
-  return DB.accounts.map(a => `
+  const ahssCards = DB.accounts.map(a => dcsAutoDcCard(a, 'ahss', a.accountName, a.product));
+  const ssCards = DB.specialSavingsAccounts.filter(sa=>sa.linkedAhssAccountNo).map(sa => dcsAutoDcCard(sa, 'specialSavings', sa.accountName, sa.productName + ' (linked to ' + sa.linkedAhssAccountNo + ')'));
+  return ahssCards.join('') + ssCards.join('');
+}
+function dcsAutoDcCard(a, kind, name, subtitle){
+  const products = accountApplicableProducts(a);
+  if(!products.length) return '';
+  return `
     <div class="dcs-card">
       <div class="dcs-card-row">
         <div>
-          <div class="dcs-card-name">${esc(a.accountName)}</div>
-          <div class="dcs-card-meta">${esc(a.accountNo)} · ${esc(projectLabel(a.project))} · ${esc(a.product)}</div>
+          <div class="dcs-card-name">${esc(name)}</div>
+          <div class="dcs-card-meta">${esc(a.accountNo)} · ${esc(projectLabel(a.project))} · ${esc(subtitle)}</div>
         </div>
         <span class="chip chip-approved">${esc(a.status)}</span>
       </div>
       <div style="margin:10px 0 4px;">
-        ${accountApplicableProducts(a).map(key => `
+        ${products.map(key => `
           <div class="dcs-toggle-row">
             <span class="dcs-toggle-label">${esc(AUTODC_PRODUCTS[key])}</span>
             <span class="chip ${accountFlagValue(a,key)?'chip-approved':'chip-rejected'}">${accountFlagValue(a,key)?'ON':'OFF'}</span>
           </div>`).join('')}
       </div>
-      <button class="btn btn-outline btn-sm dcs-btn-block" style="margin-top:8px;" onclick="dcsNavigate({mod:'ahss',screen:'autodcForm',params:{accountNo:'${a.accountNo}'}})">Request Continue / Discontinue</button>
-    </div>`).join('');
+      <button class="btn btn-outline btn-sm dcs-btn-block" style="margin-top:8px;" onclick="dcsNavigate({mod:'ahss',screen:'autodcForm',params:{accountNo:'${a.accountNo}',kind:'${kind}'}})">Request Continue / Discontinue</button>
+    </div>`;
 }
 function dcsAutoDcHomeApprover(){
   const list = DB.continuationRequests.slice().sort((a,b)=> b.requestDate.localeCompare(a.requestDate));
@@ -941,7 +964,8 @@ function dcsAutoDcHomeApprover(){
   `;
 }
 function dcsAutoDcForm(params){
-  const a = DB.accounts.find(x=>x.accountNo===params.accountNo);
+  const kind = params.kind || 'ahss';
+  const a = findAutoDcAccount(kind, params.accountNo);
   if(!a) return '<div class="dcs-empty">Account not found.</div>';
   return `
     <div class="dcs-section-block">
@@ -968,19 +992,19 @@ function dcsAutoDcForm(params){
     </div>
     <div style="display:flex;gap:10px;">
       <button class="btn btn-ghost" style="flex:1;" onclick="dcsBack()">Cancel</button>
-      <button class="btn btn-primary" style="flex:2;" onclick="dcsSubmitAutoDc('${a.accountNo}')">Submit Request</button>
+      <button class="btn btn-primary" style="flex:2;" onclick="dcsSubmitAutoDc('${a.accountNo}','${kind}')">Submit Request</button>
     </div>
   `;
 }
 function wireDcsAutoDcForm(){ /* no autosave needed for this short form */ }
-function dcsSubmitAutoDc(accountNo){
+function dcsSubmitAutoDc(accountNo, kind){
   const form = document.getElementById('dcsAutoDcFormEl');
   const fd = collectForm(form);
   if(!fd.product || !fd.action || !fd.reason){ toast('Please complete all fields.'); return; }
-  const a = DB.accounts.find(x=>x.accountNo===accountNo);
+  const a = findAutoDcAccount(kind, accountNo);
   showConfirm('Submit request', `Submit ${fd.action.toLowerCase()} request for "${fd.product}"?`, ()=>{
     DB.continuationRequests.unshift({
-      id: newCrId(), memberNo: a.memberNo, memberName: a.accountName, project: a.project, branch: a.branch,
+      id: newCrId(), kind, memberNo: a.memberNo, memberName: a.accountName, project: a.project, branch: a.branch,
       accountNo: a.accountNo, product: fd.product, action: fd.action, reason: fd.reason,
       proposedBy: FIELD_USER, requestDate: todayISO(), status: 'BM Pending',
       dcsApprovedBy: '', verification: '', comment: ''
@@ -1050,11 +1074,7 @@ function dcsDecideAutoDc(id, newStatus){
   }, { yesClass: newStatus==='BM Rejected' ? 'btn-danger' : 'btn-primary', yesLabel: newStatus==='ERP Pending'?'Approve':'Confirm' });
 }
 
-/* -------------------- A4: Demo — AHSS inside other DCS flows -------------------- */
-function dcsSetDemoFlow(f){ ui.demoFlow = f; render(); }
-function memberOptions(selected){
-  return DB.members.map(m=>`<option value="${esc(m.memberNo)}" ${selected===m.memberNo?'selected':''}>${esc(m.name)} — ${esc(m.memberNo)}</option>`).join('');
-}
+/* -------------------- AHSS selection helper (used by the real Loan form) -------------------- */
 function aHssInfoCard(a){
   return `
     <div class="dcs-card" style="border-color:var(--ok);">
@@ -1072,8 +1092,7 @@ function aHssInfoCard(a){
       </div>
     </div>`;
 }
-function dcsHandleModeSelect(selectEl, memberSelId, resultDivId){
-  const memberNo = document.getElementById(memberSelId).value;
+function dcsHandleModeSelect(selectEl, memberNo, resultDivId){
   const resultDiv = document.getElementById(resultDivId);
   if(selectEl.value !== 'AHSS'){ resultDiv.innerHTML=''; return; }
   const acct = findAccountByMember(memberNo);
@@ -1085,155 +1104,6 @@ function dcsHandleModeSelect(selectEl, memberSelId, resultDivId){
     }, ()=>{ selectEl.value = 'Cash'; resultDiv.innerHTML=''; });
   }
 }
-function dcsScreenDemo(){
-  const chips = [
-    {id:'loan', label:'Loan Application'},
-    {id:'savings', label:'Savings Enrollment'},
-    {id:'csi', label:'CSI Premium'},
-    {id:'special', label:'Special Savings'},
-  ];
-  return `
-    <div class="dcs-chip-tab">
-      ${chips.map(c=>`<button class="${ui.demoFlow===c.id?'active':''}" onclick="dcsSetDemoFlow('${c.id}')">${esc(c.label)}</button>`).join('')}
-    </div>
-    <div class="dcs-subtle">These screens simulate where AHSS is offered as a disbursement / collection / autocredit-autodebit option inside existing DCS flows.</div>
-    ${ui.demoFlow==='loan' ? dcsDemoLoan() : ''}
-    ${ui.demoFlow==='savings' ? dcsDemoSavings() : ''}
-    ${ui.demoFlow==='csi' ? dcsDemoCsi() : ''}
-    ${ui.demoFlow==='special' ? dcsDemoSpecial() : ''}
-  `;
-}
-function dcsDemoLoan(){
-  return `
-    <div class="dcs-section-block">
-      <div class="dcs-section-hd">Loan Application</div>
-      <div class="dcs-field"><label class="dcs-label">Member</label><select class="dcs-select" id="loanMember">${memberOptions()}</select></div>
-      <div class="dcs-field"><label class="dcs-label">Disbursement Mode</label>
-        <select class="dcs-select" id="loanDisb" onchange="dcsHandleModeSelect(this,'loanMember','loanDisbResult')"><option>Cash</option><option>Bank Transfer</option><option>AHSS</option></select>
-      </div>
-      <div id="loanDisbResult"></div>
-      <div class="dcs-field"><label class="dcs-label">Collection Mode</label>
-        <select class="dcs-select" id="loanColl" onchange="dcsHandleModeSelect(this,'loanMember','loanCollResult')"><option>Cash</option><option>Bank Transfer</option><option>AHSS</option></select>
-      </div>
-      <div id="loanCollResult"></div>
-      <div class="dcs-toggle-row" style="margin-top:8px;">
-        <span class="dcs-toggle-label">Auto debit loan installment from AHSS</span>
-        <button class="dcs-toggle" id="loanAutoDebitToggle" onclick="dcsToggleAutoDebit('loanMember','loanInstallment')"></button>
-      </div>
-    </div>`;
-}
-function dcsDemoSavings(){
-  return `
-    <div class="dcs-section-block">
-      <div class="dcs-section-hd">Savings Product Enrollment</div>
-      <div class="dcs-field"><label class="dcs-label">Member</label><select class="dcs-select" id="savMember">${memberOptions()}</select></div>
-      <div class="dcs-field"><label class="dcs-label">Savings Product</label><select class="dcs-select">${DB.savingsProducts.map(p=>`<option>${esc(p)}</option>`).join('')}</select></div>
-      <div class="dcs-field"><label class="dcs-label">Installment Collection Mode</label>
-        <select class="dcs-select" id="savColl" onchange="dcsHandleModeSelect(this,'savMember','savCollResult')"><option>Cash</option><option>AHSS</option></select>
-      </div>
-      <div id="savCollResult"></div>
-    </div>`;
-}
-function dcsDemoCsi(){
-  return `
-    <div class="dcs-section-block">
-      <div class="dcs-section-hd">CSI Premium Collection</div>
-      <div class="dcs-field"><label class="dcs-label">Member</label><select class="dcs-select" id="csiMember" onchange="dcsCsiUpdate()">${memberOptions()}</select></div>
-      <div id="csiAmountBox" class="dcs-summary-card">
-        <div class="dcs-summary-label">System-calculated premium due</div>
-        <div class="dcs-summary-amt" id="csiAmount">—</div>
-      </div>
-      <div class="dcs-field">
-        <label class="dcs-label">Collection Method</label>
-        <div class="dcs-radio-row">
-          <label class="dcs-radio"><input type="radio" name="csiMethod" value="Cash" checked onchange="dcsCsiUpdate()"> Cash</label>
-          <label class="dcs-radio"><input type="radio" name="csiMethod" value="AHSS" onchange="dcsCsiUpdate()"> AHSS</label>
-        </div>
-      </div>
-      <div id="csiResult"></div>
-      <button class="btn btn-primary dcs-btn-block" style="margin-top:8px;" onclick="dcsCsiCollect()">Collect Premium</button>
-    </div>`;
-}
-function dcsCsiPremiumFor(memberNo){ return 150 + (memberNo.length * 37) % 350; }
-function dcsCsiUpdate(){
-  const memberNo = document.getElementById('csiMember').value;
-  const amt = dcsCsiPremiumFor(memberNo);
-  document.getElementById('csiAmount').textContent = money(amt);
-  const method = (document.querySelector('input[name="csiMethod"]:checked')||{}).value;
-  const result = document.getElementById('csiResult');
-  if(method === 'AHSS'){
-    const acct = findAccountByMember(memberNo);
-    result.innerHTML = acct
-      ? `<div class="dcs-subtle">AHSS balance: <b>${money(acct.balance)}</b></div>`
-      : `<div class="dcs-subtle" style="color:var(--danger);">No AHSS account for this member.</div>`;
-  } else { result.innerHTML = ''; }
-}
-function dcsCsiCollect(){
-  const memberNo = document.getElementById('csiMember').value;
-  const amt = dcsCsiPremiumFor(memberNo);
-  const method = (document.querySelector('input[name="csiMethod"]:checked')||{}).value;
-  if(method !== 'AHSS'){ toast(`Collected ${money(amt)} in cash.`); return; }
-  const acct = findAccountByMember(memberNo);
-  if(!acct){ openNoAccountModal(()=>{ dcsNavigate({mod:'ahss',screen:'form',params:{memberNo}}); }); return; }
-  if(acct.balance < amt){ openInsufficientModal(); return; }
-  showConfirm('Collect premium', `Deduct ${money(amt)} from AHSS account ${acct.accountNo}?`, ()=>{
-    acct.balance -= amt;
-    acct.transactions.push({ date: todayISO(), description: 'CSI premium auto debit', debit: amt, credit: 0, balance: acct.balance });
-    persist();
-    toast(`Collected ${money(amt)} from AHSS. New balance ${money(acct.balance)}.`);
-    render();
-  });
-}
-function dcsToggleAutoDebit(memberSelId, key){
-  const memberNo = document.getElementById(memberSelId).value;
-  const acct = findAccountByMember(memberNo);
-  if(!acct){ toast('No AHSS account for this member.'); return; }
-  const current = accountFlagValue(acct, key);
-  showConfirm('Auto debit', `${current?'Turn off':'Turn on'} auto debit for this product?`, ()=>{
-    acct.autoDebit[key] = !current;
-    persist();
-    render();
-  });
-}
-function dcsDemoSpecial(){
-  const specialMembers = DB.accounts.filter(a=>a.product==='Special Savings').map(a=>a.memberNo);
-  const opts = DB.members.filter(m=>specialMembers.includes(m.memberNo));
-  if(!opts.length) return `<div class="dcs-empty">No members currently hold a Special Savings AHSS account.</div>`;
-  return `
-    <div class="dcs-section-block">
-      <div class="dcs-section-hd">Special Savings Enrollment Fields</div>
-      <div class="dcs-field"><label class="dcs-label">Member</label>
-        <select class="dcs-select" id="spMember" onchange="dcsSpecialRender()">${opts.map(m=>`<option value="${esc(m.memberNo)}">${esc(m.name)} — ${esc(m.memberNo)}</option>`).join('')}</select>
-      </div>
-      <div id="spFields"></div>
-    </div>`;
-}
-function dcsSpecialToggle(key, group){
-  const memberNo = document.getElementById('spMember').value;
-  const acct = findAccountByMember(memberNo);
-  const cur = accountFlagValue(acct, key);
-  acct[group][key] = !cur;
-  persist();
-  dcsSpecialRender();
-  if(!cur){ toast('Consent capture is now required for this change.'); }
-}
-function dcsSpecialRender(){
-  const memberNo = document.getElementById('spMember').value;
-  const acct = findAccountByMember(memberNo);
-  const anyYes = acct.autoCredit.monthlyProfit || acct.autoCredit.maturityAmount || acct.autoDebit.dpsInstallment;
-  document.getElementById('spFields').innerHTML = `
-    <div class="dcs-toggle-row"><span class="dcs-toggle-label">Monthly Profit to AHSS (autocredit)</span>
-      <button class="dcs-toggle ${acct.autoCredit.monthlyProfit?'on':''}" onclick="dcsSpecialToggle('monthlyProfit','autoCredit')"></button></div>
-    <div class="dcs-toggle-row"><span class="dcs-toggle-label">Maturity amount (Term Deposit) to AHSS (autocredit)</span>
-      <button class="dcs-toggle ${acct.autoCredit.maturityAmount?'on':''}" onclick="dcsSpecialToggle('maturityAmount','autoCredit')"></button></div>
-    <div class="dcs-toggle-row"><span class="dcs-toggle-label">DPS installment from AHSS (autodebit)</span>
-      <button class="dcs-toggle ${acct.autoDebit.dpsInstallment?'on':''}" onclick="dcsSpecialToggle('dpsInstallment','autoDebit')"></button></div>
-    ${anyYes ? `
-      <div class="dcs-check-row" style="margin-top:10px;"><input type="checkbox"><span>Client has agreed to this auto debit / auto credit setup.</span></div>
-      <button class="btn btn-outline btn-sm" onclick="toast('Client confirmation captured.')">Capture client confirmation</button>` : ''}
-  `;
-}
-
 /* -------------------- A8: Account View -------------------- */
 function dcsScreenAccount(params){
   if(params && params.accountNo) ui.dcsSelectedAccount = params.accountNo;
@@ -1284,6 +1154,7 @@ function dcsSsModule(v){
   if(v.screen === 'wizard') return dcsSsWizard(v.params.step || 1);
   if(v.screen === 'preview') return dcsSsPreview();
   if(v.screen === 'detail') return dcsSsDetail(v.params);
+  if(v.screen === 'accountView') return dcsSsAccountView(v.params);
   return dcsSsHome();
 }
 
@@ -1907,6 +1778,8 @@ function dcsSsDetail(params){
       <div class="dcs-card-row" style="margin-bottom:8px;"><div class="dcs-card-name">${esc(r.memberName)}</div><span class="chip ${statusChipClass(r.status)}">${esc(r.status)}</span></div>
       ${ssDetailRows(r)}
     </div>
+    ${r.linkedSsAccountNo ? `
+    <button class="btn btn-outline btn-sm dcs-btn-block" onclick="dcsNavigate({mod:'ss',screen:'accountView',params:{accountNo:'${r.linkedSsAccountNo}'}})">View account &amp; transactions</button>` : ''}
     ${actionable ? `
     <div class="dcs-section-block">
       <div class="dcs-section-hd">Decision</div>
@@ -1934,12 +1807,316 @@ function ssDecide(id, newStatus){
   }, { yesClass: newStatus==='BM Rejected'?'btn-danger':'btn-primary', yesLabel: verbs[newStatus] });
 }
 
+/* -------------------- Special Savings: linked account view -------------------- */
+function dcsSsAccountView(params){
+  const sa = DB.specialSavingsAccounts.find(x=>x.accountNo===params.accountNo);
+  if(!sa) return '<div class="dcs-empty">Account not found.</div>';
+  return `
+    <div class="dcs-summary-card">
+      <div class="dcs-summary-label">${esc(sa.accountName)} · ${esc(sa.accountNo)}</div>
+      <div class="dcs-summary-amt">${money(sa.balance)}</div>
+      <div class="dcs-summary-sub"><span>${esc(sa.productName)} · ${esc(sa.tenureYears)} yrs</span><span class="chip chip-approved">${esc(sa.status)}</span></div>
+    </div>
+    <div class="dcs-section-block">
+      <div class="erp-readonly-summary">
+        ${ssRow('Maturity Amount', money(sa.maturityAmount))}
+        ${ssRow('Maturity Date', fmtDate(sa.maturityDate))}
+        ${ssRow('Linked AHSS Account', sa.linkedAhssAccountNo || '—')}
+        ${ssRow('Insurance Policy', sa.insurance ? sa.insurance.policyType + ' — ' + money(sa.insurance.premium) : '—')}
+      </div>
+    </div>
+    ${sa.linkedAhssAccountNo ? `
+    <button class="btn btn-outline btn-sm dcs-btn-block" onclick="dcsNavigate({mod:'ahss',screen:'autodcHome',params:{}})">Manage auto debit/credit to AHSS</button>` : ''}
+    <div class="dcs-section-title">Transactions</div>
+    <div class="dcs-section-block">
+      ${sa.transactions.slice().reverse().map(t=>`
+        <div class="dcs-txn">
+          <div><div class="dcs-txn-desc">${esc(t.description)}</div><div class="dcs-txn-date">${esc(fmtDate(t.date))}</div></div>
+          <div class="dcs-txn-amt ${t.credit?'credit':'debit'}">${t.credit?'+':'-'}${money(t.credit||t.debit)}</div>
+        </div>`).join('') || '<div class="dcs-empty">No transactions yet.</div>'}
+    </div>
+  `;
+}
+
+/* ==========================================================================
+   MODULE: Member Admission (DCS)
+   ========================================================================== */
+function newMemberNo(){ return 'MEM-' + String(100000 + (Date.now() % 900000)).slice(0,6); }
+function newErpMemberNo(){ return 'ERP-' + String(40000 + (Date.now() % 9000)); }
+const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
+
+function dcsAdmissionModule(v){
+  if(v.screen === 'form') return dcsAdmissionForm();
+  return dcsAdmissionHome();
+}
+function dcsAdmissionHome(){
+  const recent = DB.members.slice().reverse().slice(0, 8);
+  return `
+    <button class="btn btn-primary dcs-btn-block" onclick="dcsNavigate({mod:'admission',screen:'form',params:{}})">+ New Member Admission</button>
+    <div class="dcs-section-title">Recently admitted</div>
+    ${recent.map(m => `
+      <div class="dcs-card">
+        <div class="dcs-card-row">
+          <div>
+            <div class="dcs-card-name">${esc(m.name)}</div>
+            <div class="dcs-card-meta">${esc(m.memberNo)} · ${esc(projectLabel(m.project))} · ${esc(m.branch)}</div>
+            <div class="dcs-card-meta">${esc(m.mobile)} · ${esc(m.category)}</div>
+          </div>
+        </div>
+      </div>`).join('') || '<div class="dcs-empty">No members yet.</div>'}
+  `;
+}
+function dcsAdmissionForm(){
+  return `
+    <form id="dcsAdmissionFormEl">
+      <div class="dcs-section-block">
+        <div class="dcs-section-hd">Member Admission</div>
+        <div class="dcs-field"><label class="dcs-label">Full Name <span class="req">*</span></label><input class="dcs-input" data-field="name"></div>
+        <div class="dcs-field"><label class="dcs-label">Gender <span class="req">*</span></label>
+          <select class="dcs-select" data-field="gender"><option value="">Select</option>${GENDER_OPTIONS.map(g=>`<option>${g}</option>`).join('')}</select>
+        </div>
+        <div class="dcs-field"><label class="dcs-label">Date of Birth <span class="req">*</span></label><input type="date" class="dcs-input" data-field="dob"></div>
+        <div class="dcs-field"><label class="dcs-label">ID Type <span class="req">*</span></label>
+          <select class="dcs-select" data-field="idType"><option value="">Select</option>${ID_TYPE_OPTIONS.map(o=>`<option>${esc(o)}</option>`).join('')}</select>
+        </div>
+        <div class="dcs-field"><label class="dcs-label">ID Number <span class="req">*</span></label><input class="dcs-input" data-field="idNumber"></div>
+        <div class="dcs-field">
+          <label class="dcs-label">Mobile Number <span class="req">*</span></label>
+          <input class="dcs-input" id="admissionMobileInput" data-field="mobile" placeholder="01XXXXXXXXX">
+          <div class="dcs-subtle" id="admissionMobileHint" style="margin:6px 0 0;"></div>
+        </div>
+        <div class="dcs-field"><label class="dcs-label">Member Category <span class="req">*</span></label>
+          <select class="dcs-select" data-field="category"><option value="">Select</option>${DB.memberCategories.map(c=>`<option>${esc(c)}</option>`).join('')}</select>
+        </div>
+        <div class="dcs-field"><label class="dcs-label">Present Address</label><textarea class="dcs-textarea" data-field="address"></textarea></div>
+      </div>
+      <div class="dcs-section-block">
+        <div class="dcs-section-hd">Project &amp; VO</div>
+        <div class="dcs-field"><label class="dcs-label">Project <span class="req">*</span></label>
+          <select class="dcs-select" data-field="projectLabel"><option value="">-Select Project-</option>${DB.projects.map(p=>`<option>${esc(p.label)}</option>`).join('')}</select>
+        </div>
+        <div class="dcs-field"><label class="dcs-label">Branch <span class="req">*</span></label><input class="dcs-input" data-field="branch"></div>
+        <div class="dcs-field"><label class="dcs-label">VO Code</label><input class="dcs-input" data-field="voCode"></div>
+      </div>
+    </form>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="dcsBack()">Cancel</button>
+      <button class="btn btn-primary" style="flex:2;" onclick="dcsSubmitAdmission()">Save / Submit</button>
+    </div>
+  `;
+}
+function wireAdmissionForm(){
+  const mobileInput = document.getElementById('admissionMobileInput');
+  if(!mobileInput) return;
+  mobileInput.addEventListener('blur', ()=>{
+    const hint = document.getElementById('admissionMobileHint');
+    const dup = findDuplicateMobile(mobileInput.value.trim(), null);
+    if(dup){
+      hint.textContent = '⚠ This mobile number is already used.';
+      hint.style.color = '#C1502E';
+      openDuplicateModal(dup, (newMobile)=>{ mobileInput.value = newMobile; hint.textContent = '✓ Verified as unique.'; hint.style.color = '#2F7D4F'; }, ()=>{ mobileInput.value=''; hint.textContent=''; });
+    } else hint.textContent = '';
+  });
+}
+function dcsSubmitAdmission(){
+  const form = document.getElementById('dcsAdmissionFormEl');
+  const fd = collectForm(form);
+  if(!fd.name || !fd.gender || !fd.dob || !fd.idType || !fd.idNumber || !fd.mobile || !fd.category || !fd.projectLabel || !fd.branch){
+    toast('Please fill all required fields (marked *).');
+    return;
+  }
+  showConfirm('Submit admission', `Admit ${fd.name} as a new member?`, ()=>{
+    const projectCode = (DB.projects.find(p=>p.label===fd.projectLabel)||{}).code || '';
+    const member = {
+      memberNo: newMemberNo(), erpMemberNo: newErpMemberNo(), name: fd.name, category: fd.category,
+      gender: fd.gender, dob: fd.dob, mobile: fd.mobile, project: projectCode, branch: fd.branch,
+      voCode: fd.voCode || '', idType: fd.idType, idNumber: fd.idNumber, address: fd.address || ''
+    };
+    DB.members.push(member);
+    persist();
+    toast(`${member.name} admitted as ${member.memberNo}.`);
+    openAdmissionModal(()=>{
+      dcsNavigate({ mod:'ahss', screen:'form', params:{ memberNo: member.memberNo } });
+    }, ()=>{
+      dcsOpenModule('admission');
+    });
+  });
+}
+
+/* ==========================================================================
+   MODULE: Loan Application (DCS) — FR-03: AHSS as disbursement / collection
+   mode, real BM → ERP approval like every other product here.
+   ========================================================================== */
+function newLoanId(){ return 'LOAN-' + Date.now(); }
+function dcsLoanModule(v){
+  if(v.screen === 'form') return dcsLoanForm(v.params);
+  if(v.screen === 'detail') return dcsLoanDetail(v.params);
+  return dcsLoanHome();
+}
+function dcsLoanHome(){
+  const f = ui.dcsListFilters.loan || (ui.dcsListFilters.loan = { q:'', from:'', to:'', status:'' });
+  let rows = DB.loanApplications.filter(r=>{
+    if(f.q){ const q=f.q.toLowerCase(); if(!(r.memberName.toLowerCase().includes(q) || r.memberNo.toLowerCase().includes(q))) return false; }
+    if(f.from && r.requestDate < f.from) return false;
+    if(f.to && r.requestDate > f.to) return false;
+    if(f.status && r.status !== f.status) return false;
+    return true;
+  }).sort((a,b)=> b.requestDate.localeCompare(a.requestDate));
+  const card = (r) => {
+    const actionable = ui.dcsRole === 'approver' && r.status === 'BM Pending';
+    return `
+    <div class="dcs-card">
+      <div class="dcs-card-row">
+        <div>
+          <div class="dcs-card-name">${esc(r.memberName)}</div>
+          <div class="dcs-card-meta">${esc(r.memberNo)} · ${esc(projectLabel(r.project))} · ${esc(fmtDate(r.requestDate))}</div>
+          <div class="dcs-card-meta">${esc(r.formData.loanProduct)} · ${money(r.formData.amount)} · ${esc(r.formData.tenureMonths)} months</div>
+        </div>
+      </div>
+      <div class="dcs-card-row" style="margin-top:8px;align-items:center;">
+        <span class="chip ${statusChipClass(r.status)}">${esc(r.status)}</span>
+        <button class="btn btn-sm ${actionable?'btn-primary':'btn-ghost'}" onclick="dcsNavigate({mod:'loan',screen:'detail',params:{id:'${r.id}'}})">${actionable?'Review':'Details'}</button>
+      </div>
+    </div>`;
+  };
+  return `
+    ${ui.dcsRole==='field' ? `<button class="btn btn-primary dcs-btn-block" onclick="dcsLoanStartNew()">+ New Loan Application</button>` : ''}
+    <input class="dcs-input" placeholder="Search by member number or name.." style="margin-bottom:10px;" value="${esc(f.q)}" oninput="ui.dcsListFilters.loan.q=this.value; dcsRefreshLoanList();">
+    <select class="dcs-select" style="margin-bottom:12px;" onchange="ui.dcsListFilters.loan.status=this.value; render();">
+      <option value="">All</option>
+      ${STATUS_OPTIONS.map(s=>`<option ${f.status===s?'selected':''}>${esc(s)}</option>`).join('')}
+    </select>
+    ${rows.map(card).join('') || '<div class="dcs-empty">No loan applications match.</div>'}
+  `;
+}
+function dcsRefreshLoanList(){ const body = document.getElementById('dcsBody'); if(body) body.innerHTML = dcsBodyContent(); }
+function dcsLoanStartNew(){
+  openMemberSearch((member)=>{
+    dcsNavigate({ mod:'loan', screen:'form', params:{ memberNo: member.memberNo } });
+  });
+}
+function dcsLoanForm(params){
+  const member = findMember(params.memberNo);
+  return `
+    <div class="dcs-card" style="margin-bottom:10px;">
+      <div class="dcs-card-name">${esc(member?member.name:'')}</div>
+      <div class="dcs-card-meta">${esc(params.memberNo)} · ${esc(member?projectLabel(member.project):'')}</div>
+    </div>
+    <form id="dcsLoanFormEl">
+      <div class="dcs-section-block">
+        <div class="dcs-section-hd">Loan Application</div>
+        <div class="dcs-field"><label class="dcs-label">Loan Product <span class="req">*</span></label>
+          <select class="dcs-select" data-field="loanProduct"><option value="">Select</option>${DB.loanProducts.map(p=>`<option>${esc(p)}</option>`).join('')}</select>
+        </div>
+        <div class="dcs-field"><label class="dcs-label">Loan Amount <span class="req">*</span></label><input class="dcs-input" data-field="amount" placeholder="e.g. 30000"></div>
+        <div class="dcs-field"><label class="dcs-label">Tenure (months) <span class="req">*</span></label><input class="dcs-input" data-field="tenureMonths" placeholder="e.g. 12"></div>
+        <div class="dcs-field"><label class="dcs-label">Purpose <span class="req">*</span></label><textarea class="dcs-textarea" data-field="purpose"></textarea></div>
+      </div>
+      <div class="dcs-section-block">
+        <div class="dcs-section-hd">Disbursement &amp; Collection</div>
+        <div class="dcs-field"><label class="dcs-label">Disbursement Mode <span class="req">*</span></label>
+          <select class="dcs-select" id="loanDisbMode" data-field="disbursementMode" onchange="dcsHandleModeSelect(this,'${params.memberNo}','loanDisbResult')">
+            <option value="">Select</option><option>Cash</option><option>Bank Transfer</option><option>AHSS</option>
+          </select>
+        </div>
+        <div id="loanDisbResult"></div>
+        <div class="dcs-field"><label class="dcs-label">Collection Mode <span class="req">*</span></label>
+          <select class="dcs-select" id="loanCollMode" data-field="collectionMode" onchange="dcsHandleModeSelect(this,'${params.memberNo}','loanCollResult')">
+            <option value="">Select</option><option>Cash</option><option>Bank Transfer</option><option>AHSS</option>
+          </select>
+        </div>
+        <div id="loanCollResult"></div>
+      </div>
+    </form>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="dcsBack()">Cancel</button>
+      <button class="btn btn-primary" style="flex:2;" onclick="dcsSubmitLoan('${params.memberNo}')">Submit Application</button>
+    </div>
+  `;
+}
+function wireLoanForm(){ /* mode-select handlers are wired inline in dcsLoanForm — nothing extra needed */ }
+function dcsSubmitLoan(memberNo){
+  const form = document.getElementById('dcsLoanFormEl');
+  const fd = collectForm(form);
+  if(!fd.loanProduct || !fd.amount || !fd.tenureMonths || !fd.purpose || !fd.disbursementMode || !fd.collectionMode){
+    toast('Please fill all required fields (marked *).');
+    return;
+  }
+  const member = findMember(memberNo);
+  if((fd.disbursementMode === 'AHSS' || fd.collectionMode === 'AHSS') && !findAccountByMember(memberNo)){
+    toast('This member needs an approved AHSS account before AHSS can be used — open one from the AHSS tile first.');
+    return;
+  }
+  showConfirm('Submit loan application', `Submit this loan application for ${member.name}?`, ()=>{
+    const installment = Math.round(Number(fd.amount) / Number(fd.tenureMonths));
+    DB.loanApplications.unshift({
+      id: newLoanId(), memberNo, memberName: member.name, project: member.project, branch: member.branch,
+      proposedBy: FIELD_USER, requestDate: todayISO(), status: 'BM Pending',
+      bmApprover: '', bmComment: '', erpApprover: '', erpComment: '',
+      formData: { loanProduct: fd.loanProduct, amount: Number(fd.amount), tenureMonths: Number(fd.tenureMonths), purpose: fd.purpose,
+        disbursementMode: fd.disbursementMode, collectionMode: fd.collectionMode, installmentAmount: installment }
+    });
+    persist();
+    toast('Loan application submitted. Awaiting BM approval.');
+    dcsOpenModule('loan');
+  });
+}
+function dcsLoanDetail(params){
+  const r = DB.loanApplications.find(x=>x.id===params.id);
+  if(!r) return '<div class="dcs-empty">Application not found.</div>';
+  const actionable = ui.dcsRole === 'approver' && r.status === 'BM Pending';
+  const fd = r.formData;
+  return `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">Loan Application ${esc(r.id)}</div>
+      <div class="dcs-card-row" style="margin-bottom:8px;"><div class="dcs-card-name">${esc(r.memberName)}</div><span class="chip ${statusChipClass(r.status)}">${esc(r.status)}</span></div>
+      <div class="erp-readonly-summary">
+        ${ssRow('Member No', r.memberNo)} ${ssRow('Project', projectLabel(r.project))}
+        ${ssRow('Loan Product', fd.loanProduct)} ${ssRow('Amount', money(fd.amount))}
+        ${ssRow('Tenure (months)', fd.tenureMonths)} ${ssRow('Installment', money(fd.installmentAmount))}
+        ${ssRow('Purpose', fd.purpose)} ${ssRow('Disbursement Mode', fd.disbursementMode)} ${ssRow('Collection Mode', fd.collectionMode)}
+        ${r.disbursementDate ? ssRow('Disbursement Date', fmtDate(r.disbursementDate)) : ''}
+        ${r.outstandingPrincipal!=null ? ssRow('Outstanding Principal', money(r.outstandingPrincipal)) : ''}
+      </div>
+    </div>
+    ${actionable ? `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">Approval decision</div>
+      <textarea class="dcs-textarea" id="loanDecisionComment" placeholder="Comment (required for Send Back / Reject)"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-danger" style="flex:1;" onclick="dcsDecideLoan('${r.id}','BM Rejected')">Reject</button>
+        <button class="btn btn-ghost" style="flex:1;" onclick="dcsDecideLoan('${r.id}','BM Sendback')">Send Back</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="dcsDecideLoan('${r.id}','ERP Pending')">Approve</button>
+      </div>
+    </div>` : ''}
+  `;
+}
+function dcsDecideLoan(id, newStatus){
+  const comment = (document.getElementById('loanDecisionComment')||{}).value || '';
+  if(newStatus !== 'ERP Pending' && !comment.trim()){ toast('A comment is required for Send Back or Reject.'); return; }
+  const verbs = { 'ERP Pending':'Approve', 'BM Sendback':'Send back', 'BM Rejected':'Reject' };
+  showConfirm(verbs[newStatus] + ' loan', `${verbs[newStatus]} this loan application?`, ()=>{
+    const r = DB.loanApplications.find(x=>x.id===id);
+    r.status = newStatus;
+    r.bmApprover = APPROVER_USER;
+    r.bmComment = comment;
+    persist();
+    toast(newStatus==='ERP Pending' ? 'Approved. Sent to ERP for disbursement approval.' : 'Decision recorded: ' + newStatus);
+    dcsOpenModule('loan');
+  }, { yesClass: newStatus==='BM Rejected'?'btn-danger':'btn-primary', yesLabel: verbs[newStatus] });
+}
+
 /* ==========================================================================
    PART B — ERP WEB
    ========================================================================== */
+const ERP_MENU_ROUTES = { 'Programme Admin':'stub', 'VO':'stub', 'Member':'member', 'Loan':'loan', 'Savings':'savings', 'Insurance':'stub', 'Report':'stub' };
 function setErpMenu(m){
-  ui.erpMenu = m;
-  if(m !== 'savings') { toast('This menu item is not part of the AHSS/Special Savings prototype.'); ui.erpMenu = 'savings'; return; }
+  const route = ERP_MENU_ROUTES[m] || 'stub';
+  if(route === 'stub'){ notImplemented(m); return; }
+  ui.erpMenu = route;
+  if(route === 'member' && !['memberList','memberForm'].includes(ui.erpTab)) ui.erpTab = 'memberList';
+  if(route === 'loan' && !['loanBuffer','loanDetail'].includes(ui.erpTab)) ui.erpTab = 'loanBuffer';
+  if(route === 'savings' && !['b1','b1detail','b2','b3','ssBuffer','ssDetail'].includes(ui.erpTab)) ui.erpTab = 'b2';
   render();
 }
 function setErpTab(t){ ui.erpTab = t; ui.erpReview = null; render(); }
@@ -1964,7 +2141,7 @@ function renderERP(){
         <div class="erp-logo">🌀<span> brac</span></div>
       </div>
       <div class="erp-menubar">
-        ${ERP_MENU.map(m=>`<button class="${m==='Savings'&&ui.erpMenu==='savings'?'active':''}" onclick="setErpMenu('${m==='Savings'?'savings':'other'}')">${esc(m)}</button>`).join('')}
+        ${ERP_MENU.map(m=>`<button class="${ui.erpMenu===ERP_MENU_ROUTES[m]?'active':''}" onclick='setErpMenu(${JSON.stringify(m)})'>${esc(m)}</button>`).join('')}
       </div>
       ${ui.erpMenu==='savings' ? `
       <div class="erp-menubar" style="background:#fff;border-bottom:1px solid var(--erp-border);flex-wrap:wrap;">
@@ -1982,6 +2159,15 @@ function renderERP(){
         <button class="${ui.erpTab==='b1'||ui.erpTab==='b1detail'?'active':''}" onclick="setErpTab('b1')">Consent Buffer Panel</button>
         <button class="${ui.erpTab==='b3'?'active':''}" onclick="setErpTab('b3')">AHSS Account View</button>
       </div>`}` : ''}
+      ${ui.erpMenu==='member' ? `
+      <div class="erp-menubar" style="background:#f4f8fb;border-bottom:1px solid var(--erp-border);">
+        <button class="${ui.erpTab==='memberList'?'active':''}" onclick="setErpTab('memberList')">Member List</button>
+        <button class="${ui.erpTab==='memberForm'?'active':''}" onclick="setErpTab('memberForm')">New Member</button>
+      </div>` : ''}
+      ${ui.erpMenu==='loan' ? `
+      <div class="erp-menubar" style="background:#f4f8fb;border-bottom:1px solid var(--erp-border);">
+        <button class="${ui.erpTab==='loanBuffer'||ui.erpTab==='loanDetail'?'active':''}" onclick="setErpTab('loanBuffer')">Loan Approval Buffer</button>
+      </div>` : ''}
       <div class="erp-layout">
         <div class="erp-sidebar">${erpSidebar()}</div>
         <div class="erp-main">${erpMainContent()}</div>
@@ -2011,6 +2197,10 @@ function erpMainContent(){
   if(ui.erpTab === 'b3') return erpB3View();
   if(ui.erpTab === 'ssBuffer') return erpSsBuffer();
   if(ui.erpTab === 'ssDetail') return erpSsDetail();
+  if(ui.erpTab === 'memberList') return erpMemberList();
+  if(ui.erpTab === 'memberForm') return erpMemberForm();
+  if(ui.erpTab === 'loanBuffer') return erpLoanBuffer();
+  if(ui.erpTab === 'loanDetail') return erpLoanDetail();
   return erpB2Form();
 }
 
@@ -2446,7 +2636,7 @@ function erpDecide(type, id, status){
       const r = DB.continuationRequests.find(x=>x.id===id);
       r.status = status;
       if(status === 'ERP Approved'){
-        const acct = DB.accounts.find(a=>a.accountNo===r.accountNo);
+        const acct = findAutoDcAccount(r.kind, r.accountNo);
         const key = Object.keys(AUTODC_PRODUCTS).find(k=>AUTODC_PRODUCTS[k]===r.product);
         if(acct && key){
           const val = r.action === 'Continue';
@@ -2628,9 +2818,191 @@ function erpGenerateSsConsentPaper(id){
   w.document.close();
 }
 
+/* -------------------- ERP: Member List / New Member -------------------- */
+function erpMemberList(){
+  const headers = ['Member No.','ERP Member No.','Name','Mobile','Project','Branch','Category'];
+  const rows = DB.members.slice().sort((a,b)=> a.name.localeCompare(b.name));
+  setRowsCache('Members', rows.map(m=>[m.memberNo,m.erpMemberNo,m.name,m.mobile,projectLabel(m.project),m.branch,m.category]));
+  return `
+    <h1 class="erp-page-title">Member List</h1>
+    ${downloadRow('Members', headers, [])}
+    <div class="erp-table-wrap"><table class="erp-table">
+      <thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(m=>`
+        <tr><td>${esc(m.memberNo)}</td><td>${esc(m.erpMemberNo)}</td><td>${esc(m.name)}</td><td>${esc(m.mobile)}</td><td>${esc(projectLabel(m.project))}</td><td>${esc(m.branch)}</td><td>${esc(m.category)}</td></tr>`).join('')}
+      </tbody>
+    </table></div>
+  `;
+}
+function erpMemberForm(){
+  return `
+    <h1 class="erp-page-title">New Member</h1>
+    <form id="erpMemberFormEl">
+    <div class="erp-section">
+      <div class="erp-section-hd">Member Information</div>
+      <div class="erp-section-body">
+        <div class="erp-grid">
+          <div class="erp-field"><label>Full Name <span class="req">*</span></label><input data-field="name"></div>
+          <div class="erp-field"><label>Gender <span class="req">*</span></label><select data-field="gender"><option value="">Select</option>${GENDER_OPTIONS.map(g=>`<option>${g}</option>`).join('')}</select></div>
+          <div class="erp-field"><label>Date of Birth <span class="req">*</span></label><input type="date" data-field="dob"></div>
+          <div class="erp-field"><label>Member Category <span class="req">*</span></label><select data-field="category"><option value="">Select</option>${DB.memberCategories.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>
+        </div>
+        <div class="erp-grid" style="margin-top:14px;">
+          <div class="erp-field"><label>ID Type <span class="req">*</span></label><select data-field="idType"><option value="">Select</option>${ID_TYPE_OPTIONS.map(o=>`<option>${esc(o)}</option>`).join('')}</select></div>
+          <div class="erp-field"><label>ID Number <span class="req">*</span></label><input data-field="idNumber"></div>
+          <div class="erp-field"><label>Mobile Number <span class="req">*</span></label><input id="erpMemberMobileInput" data-field="mobile"></div>
+        </div>
+      </div>
+    </div>
+    <div class="erp-section">
+      <div class="erp-section-hd">Project &amp; VO</div>
+      <div class="erp-section-body">
+        <div class="erp-grid">
+          <div class="erp-field"><label>Project <span class="req">*</span></label><select data-field="projectLabel"><option value="">-Select Project-</option>${DB.projects.map(p=>`<option>${esc(p.label)}</option>`).join('')}</select></div>
+          <div class="erp-field"><label>Branch <span class="req">*</span></label><input data-field="branch"></div>
+          <div class="erp-field"><label>VO Code</label><input data-field="voCode"></div>
+        </div>
+        <div class="erp-grid" style="margin-top:14px;">
+          <div class="erp-field span-4"><label>Present Address</label><textarea data-field="address" rows="2"></textarea></div>
+        </div>
+      </div>
+    </div>
+    </form>
+    <div class="erp-btn-row">
+      <button class="erp-btn" onclick="erpSubmitMember()">Save</button>
+      <button class="erp-btn" onclick="setErpTab('memberForm')">Clear</button>
+    </div>
+  `;
+}
+function wireErpMemberForm(){
+  const mobileInput = document.getElementById('erpMemberMobileInput');
+  if(!mobileInput) return;
+  mobileInput.addEventListener('blur', ()=>{
+    const dup = findDuplicateMobile(mobileInput.value.trim(), null);
+    if(dup) openDuplicateModal(dup, (newMobile)=>{ mobileInput.value = newMobile; }, ()=>{ mobileInput.value=''; });
+  });
+}
+function erpSubmitMember(){
+  const form = document.getElementById('erpMemberFormEl');
+  const fd = collectForm(form);
+  if(!fd.name || !fd.gender || !fd.dob || !fd.category || !fd.idType || !fd.idNumber || !fd.mobile || !fd.projectLabel || !fd.branch){
+    toast('Please fill all required fields (marked *).');
+    return;
+  }
+  showConfirm('Save member', `Create a new member record for ${fd.name}?`, ()=>{
+    const projectCode = (DB.projects.find(p=>p.label===fd.projectLabel)||{}).code || '';
+    const member = {
+      memberNo: newMemberNo(), erpMemberNo: newErpMemberNo(), name: fd.name, category: fd.category,
+      gender: fd.gender, dob: fd.dob, mobile: fd.mobile, project: projectCode, branch: fd.branch,
+      voCode: fd.voCode || '', idType: fd.idType, idNumber: fd.idNumber, address: fd.address || ''
+    };
+    DB.members.push(member);
+    persist();
+    toast(`Member ${member.name} created as ${member.memberNo}.`);
+    setErpTab('memberList');
+  });
+}
+
+/* -------------------- ERP: Loan Approval Buffer -------------------- */
+function erpLoanBuffer(){
+  const rows = DB.loanApplications.filter(r=> ERP_REACHED_STATUSES.includes(r.status)).sort((a,b)=> b.requestDate.localeCompare(a.requestDate));
+  const headers = ['Loan ID','Member Name','Member No','Project','Loan Product','Amount','Tenure (mo)','Approver','Request Date','Status'];
+  setRowsCache('Loan Buffer', rows.map(r=>[r.id,r.memberName,r.memberNo,projectLabel(r.project),r.formData.loanProduct,money(r.formData.amount),r.formData.tenureMonths,'BM',fmtDate(r.requestDate),r.status]));
+  return `
+    <h1 class="erp-page-title">Loan Approval Buffer</h1>
+    ${downloadRow('Loan Buffer', headers, [])}
+    <div class="erp-table-wrap"><table class="erp-table">
+      <thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Action</th></tr></thead>
+      <tbody>${rows.map(r=>`
+        <tr>
+          <td>${esc(r.id)}</td><td>${esc(r.memberName)}</td><td>${esc(r.memberNo)}</td><td>${esc(projectLabel(r.project))}</td>
+          <td>${esc(r.formData.loanProduct)}</td><td>${money(r.formData.amount)}</td><td>${esc(r.formData.tenureMonths)}</td><td>BM</td>
+          <td>${esc(fmtDate(r.requestDate))}</td>
+          <td><span class="chip ${statusChipClass(r.status)}">${esc(r.status)}</span></td>
+          <td><button class="erp-btn" style="padding:5px 12px;" onclick="erpOpenLoanReview('${r.id}')">Review</button></td>
+        </tr>`).join('') || `<tr><td colspan="11" style="text-align:center;color:#8a97a1;padding:20px;">No loan applications match.</td></tr>`}
+      </tbody>
+    </table></div>
+  `;
+}
+function erpOpenLoanReview(id){ ui.erpReview = { type:'loan', id }; ui.erpTab = 'loanDetail'; render(); }
+function erpLoanDetail(){
+  const rv = ui.erpReview;
+  const r = rv && DB.loanApplications.find(x=>x.id===rv.id);
+  if(!r) return '<div class="dcs-empty">Loan application not found.</div>';
+  const actionable = r.status === 'ERP Pending';
+  const fd = r.formData;
+  return `
+    <button class="erp-link-btn" style="margin-bottom:10px;" onclick="setErpTab('loanBuffer')">← Back to Loan Approval Buffer</button>
+    <h1 class="erp-page-title">Loan ${esc(r.id)} <span class="chip ${statusChipClass(r.status)}" style="margin-left:10px;">${esc(r.status)}</span></h1>
+    <div class="erp-section">
+      <div class="erp-section-hd">Loan Details</div>
+      <div class="erp-section-body">
+        <div class="erp-readonly-summary">
+          <div class="kv"><span>Member</span><span>${esc(r.memberName)} (${esc(r.memberNo)})</span></div>
+          <div class="kv"><span>Project / Branch</span><span>${esc(projectLabel(r.project))} · ${esc(r.branch)}</span></div>
+          <div class="kv"><span>Loan Product</span><span>${esc(fd.loanProduct)}</span></div>
+          <div class="kv"><span>Amount</span><span>${money(fd.amount)}</span></div>
+          <div class="kv"><span>Tenure</span><span>${esc(fd.tenureMonths)} months (installment ${money(fd.installmentAmount)})</span></div>
+          <div class="kv"><span>Purpose</span><span>${esc(fd.purpose)}</span></div>
+          <div class="kv"><span>Disbursement Mode</span><span>${esc(fd.disbursementMode)}</span></div>
+          <div class="kv"><span>Collection Mode</span><span>${esc(fd.collectionMode)}</span></div>
+          <div class="kv"><span>BM Approver</span><span>${esc(r.bmApprover)}</span></div>
+          <div class="kv"><span>BM Comment</span><span>${esc(r.bmComment)}</span></div>
+        </div>
+      </div>
+    </div>
+    ${actionable ? `
+    <div class="erp-section">
+      <div class="erp-section-hd">Decision</div>
+      <div class="erp-section-body">
+        <div class="erp-field"><label>Reviewer Comment</label><textarea id="loanErpComment" rows="3" placeholder="Required for Send Back or Reject"></textarea></div>
+        <div class="erp-btn-row">
+          <button class="erp-btn" style="background:#DCEEE2;border-color:#9ecdac;" onclick="erpDecideLoan('${r.id}','ERP Approved')">Approve &amp; Disburse</button>
+          <button class="erp-btn" style="background:#EDE3F8;border-color:#c9adf0;" onclick="erpDecideLoan('${r.id}','ERP Sendback')">Send Back</button>
+          <button class="erp-btn" style="background:#F8DAD2;border-color:#e2a894;" onclick="erpDecideLoan('${r.id}','ERP Rejected')">Reject</button>
+        </div>
+      </div>
+    </div>` : ''}
+  `;
+}
+function erpDecideLoan(id, status){
+  const comment = (document.getElementById('loanErpComment')||{}).value || '';
+  if(status !== 'ERP Approved' && !comment.trim()){ toast('A reviewer comment is required for Send Back or Reject.'); return; }
+  showConfirm(status + ' loan', `Confirm: ${status} this loan application?`, ()=>{
+    const r = DB.loanApplications.find(x=>x.id===id);
+    r.status = status;
+    r.erpApprover = ERP_USER;
+    r.erpComment = comment;
+    if(status === 'ERP Approved'){
+      const fd = r.formData;
+      r.disbursementDate = todayISO();
+      r.outstandingPrincipal = fd.amount;
+      if(fd.disbursementMode === 'AHSS' || fd.collectionMode === 'AHSS'){
+        const acct = findAccountByMember(r.memberNo);
+        if(acct){
+          r.linkedAhssAccountNo = acct.accountNo;
+          if(fd.disbursementMode === 'AHSS'){
+            acct.balance += fd.amount;
+            acct.transactions.push({ date: todayISO(), description: `Loan disbursement credit (${r.id})`, debit: 0, credit: fd.amount, balance: acct.balance });
+          }
+          if(fd.collectionMode === 'AHSS'){
+            acct.autoDebit.loanInstallment = true;
+          }
+        }
+      }
+    }
+    persist();
+    toast('Decision recorded: ' + status);
+    ui.erpReview = null;
+    setErpTab('loanBuffer');
+  }, { yesClass: status==='ERP Approved'?'btn-primary':(status==='ERP Rejected'?'btn-danger':'btn-outline') });
+}
+
 /* ---------------- final render hook: wire ERP forms after paint ---------------- */
 const _origRenderERP = renderERP;
 renderERP = function(){
   _origRenderERP();
   if(ui.erpTab === 'b2') wireErpB2Form();
+  if(ui.erpTab === 'memberForm') wireErpMemberForm();
 };

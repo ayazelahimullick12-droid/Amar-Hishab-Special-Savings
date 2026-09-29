@@ -24,6 +24,8 @@
     { "name": "Long Term Monthly Deposit", "subType": "DPS", "savingsProductType": "Voluntary and Current Savings", "tenureYears": [3, 5, 8, 10], "depositAmounts": [100, 200, 500, 1000, 2000, 5000, 10000] },
     { "name": "Monthly Profit Deposit", "subType": "Term Deposit", "savingsProductType": "Term Savings", "tenureYears": [3, 5, 8, 10], "depositAmounts": [10000, 20000, 50000, 100000] }
   ],
+  "loanProducts": ["Dabi General Loan", "Progoti Loan", "Small Enterprise Loan", "Agriculture Loan", "Seasonal Loan"],
+  "memberCategories": ["General", "Micro Enterprise"],
   "reasonOptions": [
     "Confirmed with client via phone",
     "Confirmed with client via branch visit",
@@ -32,12 +34,21 @@
     "Other"
   ],
   "members": [
-    { "memberNo": "MEM-100234", "erpMemberNo": "ERP-45231", "name": "Rahima Begum", "category": "General", "mobile": "01711223344", "project": "DABI", "branch": "Mirpur-2" },
-    { "memberNo": "MEM-100511", "erpMemberNo": "ERP-45890", "name": "Salma Khatun", "category": "General", "mobile": "01822334455", "project": "Progoti", "branch": "Savar" },
-    { "memberNo": "MEM-100788", "erpMemberNo": "ERP-46012", "name": "Nasima Akter", "category": "General", "mobile": "01933445566", "project": "DABI", "branch": "Mirpur-2" },
-    { "memberNo": "MEM-101020", "erpMemberNo": "ERP-46550", "name": "Rina Islam", "category": "General", "mobile": "01644556677", "project": "BCUP", "branch": "Cumilla Sadar" },
-    { "memberNo": "MEM-101250", "erpMemberNo": "ERP-47102", "name": "Ayesha Siddika", "category": "General", "mobile": "01755667788", "project": "DABI", "branch": "Mirpur-2" },
-    { "memberNo": "MEM-101477", "erpMemberNo": "ERP-47820", "name": "Moriom Jahan", "category": "Micro Enterprise", "mobile": "01966778899", "project": "Progoti", "branch": "Savar" }
+    { "memberNo": "MEM-100234", "erpMemberNo": "ERP-45231", "name": "Rahima Begum", "category": "General", "gender": "Female", "dob": "1988-04-12", "mobile": "01711223344", "project": "DABI", "branch": "Mirpur-2", "voCode": 2090, "idType": "National ID", "idNumber": "1988112233445", "address": "House 12, Road 3, Mirpur-2, Dhaka" },
+    { "memberNo": "MEM-100511", "erpMemberNo": "ERP-45890", "name": "Salma Khatun", "category": "General", "gender": "Female", "dob": "1985-09-03", "mobile": "01822334455", "project": "Progoti", "branch": "Savar", "voCode": 2215, "idType": "National ID", "idNumber": "1985998877665", "address": "Vill. Bank Colony, Savar, Dhaka" },
+    { "memberNo": "MEM-100788", "erpMemberNo": "ERP-46012", "name": "Nasima Akter", "category": "General", "gender": "Female", "dob": "1990-01-25", "mobile": "01933445566", "project": "DABI", "branch": "Mirpur-2", "voCode": 2090, "idType": "National ID", "idNumber": "1990334455667", "address": "House 5, Section 6, Mirpur-2, Dhaka" },
+    { "memberNo": "MEM-101020", "erpMemberNo": "ERP-46550", "name": "Rina Islam", "category": "General", "gender": "Female", "dob": "1992-06-30", "mobile": "01644556677", "project": "BCUP", "branch": "Cumilla Sadar", "voCode": 2143, "idType": "Smart Card", "idNumber": "1992556677889", "address": "Kandirpar, Cumilla Sadar" },
+    { "memberNo": "MEM-101250", "erpMemberNo": "ERP-47102", "name": "Ayesha Siddika", "category": "General", "gender": "Female", "dob": "1987-11-08", "mobile": "01755667788", "project": "DABI", "branch": "Mirpur-2", "voCode": 2090, "idType": "National ID", "idNumber": "1987667788990", "address": "House 20, Section 2, Mirpur-2, Dhaka" },
+    { "memberNo": "MEM-101477", "erpMemberNo": "ERP-47820", "name": "Moriom Jahan", "category": "Micro Enterprise", "gender": "Female", "dob": "1983-03-14", "mobile": "01966778899", "project": "Progoti", "branch": "Savar", "voCode": 2215, "idType": "National ID", "idNumber": "1983778899001", "address": "Genda, Savar, Dhaka" },
+    { "memberNo": "MEM-101600", "erpMemberNo": "ERP-48001", "name": "Halima Khatun", "category": "General", "gender": "Female", "dob": "1991-07-19", "mobile": "01611002200", "project": "DABI", "branch": "Mirpur-2", "voCode": 2090, "idType": "Birth Certificate", "idNumber": "19917190002211", "address": "House 8, Section 10, Mirpur-2, Dhaka" },
+    { "memberNo": "MEM-101733", "erpMemberNo": "ERP-48112", "name": "Kulsum Begum", "category": "General", "gender": "Female", "dob": "1989-02-02", "mobile": "01722003300", "project": "DABI", "branch": "Mirpur-2", "voCode": 2090, "idType": "National ID", "idNumber": "1989220033004", "address": "House 15, Section 11, Mirpur-2, Dhaka" },
+    { "memberNo": "MEM-101855", "erpMemberNo": "ERP-48223", "name": "Fahima Akter", "category": "General", "gender": "Female", "dob": "1993-10-10", "mobile": "01833004400", "project": "Progoti", "branch": "Savar", "voCode": 2215, "idType": "Smart Card", "idNumber": "1993330044005", "address": "Bazar Road, Savar, Dhaka" },
+    { "memberNo": "MEM-101966", "erpMemberNo": "ERP-48334", "name": "Nurjahan Ali", "category": "General", "gender": "Female", "dob": "1986-12-01", "mobile": "01944005500", "project": "BCUP", "branch": "Cumilla Sadar", "voCode": 2143, "idType": "National ID", "idNumber": "1986440055006", "address": "Rajganj, Cumilla Sadar" },
+    { "memberNo": "MEM-102077", "erpMemberNo": "ERP-48445", "name": "Delwar Hossain", "category": "Micro Enterprise", "gender": "Male", "dob": "1980-05-05", "mobile": "01655006600", "project": "DABI", "branch": "Mirpur-2", "voCode": 2090, "idType": "National ID", "idNumber": "1980550066007", "address": "House 30, Section 12, Mirpur-2, Dhaka" },
+    { "memberNo": "MEM-102188", "erpMemberNo": "ERP-48556", "name": "Shirin Aktar", "category": "General", "gender": "Female", "dob": "1994-08-08", "mobile": "01766007700", "project": "Progoti", "branch": "Savar", "voCode": 2215, "idType": "National ID", "idNumber": "1994660077008", "address": "Ashulia, Savar, Dhaka" },
+    { "memberNo": "MEM-102299", "erpMemberNo": "ERP-48667", "name": "Abdul Karim", "category": "Micro Enterprise", "gender": "Male", "dob": "1975-01-30", "mobile": "01877008800", "project": "DABI", "branch": "Mirpur-2", "voCode": 2090, "idType": "National ID", "idNumber": "1975770088009", "address": "House 2, Section 1, Mirpur-2, Dhaka" },
+    { "memberNo": "MEM-102410", "erpMemberNo": "ERP-48778", "name": "Nasrin Sultana", "category": "General", "gender": "Female", "dob": "1990-04-04", "mobile": "01988009900", "project": "BCUP", "branch": "Cumilla Sadar", "voCode": 2143, "idType": "Smart Card", "idNumber": "1990880099000", "address": "Kandirpar, Cumilla Sadar" },
+    { "memberNo": "MEM-102521", "erpMemberNo": "ERP-48889", "name": "Monira Yasmin", "category": "General", "gender": "Female", "dob": "1992-09-09", "mobile": "01599001122", "project": "NCDP", "branch": "Bogura Sadar", "voCode": 3301, "idType": "National ID", "idNumber": "1992990011223", "address": "Satmatha, Bogura Sadar" }
   ],
   "accounts": [
     {
@@ -49,20 +60,22 @@
       "product": "General Savings",
       "accountType": "Single",
       "status": "Approved",
-      "balance": 8450,
+      "balance": 13450,
       "openingDate": "2026-03-10",
       "nominee": { "name": "Karim Mia", "relationship": "Spouse", "dob": "1978-05-14", "nid": "1985674123456", "percentage": 100 },
       "autoDebit": { "loanInstallment": true, "savingsInstallment": false },
       "transactions": [
         { "date": "2026-03-10", "description": "Account opening deposit", "debit": 0, "credit": 500, "balance": 500 },
-        { "date": "2026-04-05", "description": "Loan disbursement credit", "debit": 0, "credit": 5000, "balance": 5500 },
+        { "date": "2026-04-05", "description": "Loan disbursement credit (LOAN-5001)", "debit": 0, "credit": 5000, "balance": 5500 },
         { "date": "2026-04-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 5050 },
         { "date": "2026-05-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 4600 },
         { "date": "2026-06-15", "description": "Member cash deposit", "debit": 0, "credit": 2000, "balance": 6600 },
         { "date": "2026-06-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 6150 },
         { "date": "2026-07-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 5700 },
         { "date": "2026-08-10", "description": "Member cash deposit", "debit": 0, "credit": 3200, "balance": 8900 },
-        { "date": "2026-08-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 8450 }
+        { "date": "2026-08-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 8450 },
+        { "date": "2026-09-01", "description": "Member cash deposit", "debit": 0, "credit": 5450, "balance": 13900 },
+        { "date": "2026-09-20", "description": "Loan installment auto debit", "debit": 450, "credit": 0, "balance": 13450 }
       ]
     },
     {
@@ -77,20 +90,19 @@
       "balance": 15200,
       "openingDate": "2026-02-02",
       "nominee": { "name": "Jamal Uddin", "relationship": "Son", "dob": "2002-11-02", "nid": "1998774123456", "percentage": 100 },
-      "autoDebit": { "loanInstallment": true, "savingsInstallment": true, "dpsInstallment": true },
-      "autoCredit": { "monthlyProfit": true, "maturityAmount": true },
+      "autoDebit": { "loanInstallment": true, "savingsInstallment": true },
       "transactions": [
         { "date": "2026-02-02", "description": "Account opening deposit", "debit": 0, "credit": 1000, "balance": 1000 },
-        { "date": "2026-03-02", "description": "DPS installment auto debit", "debit": 1500, "credit": 0, "balance": -500 },
-        { "date": "2026-03-05", "description": "Member cash deposit", "debit": 0, "credit": 6000, "balance": 5500 },
-        { "date": "2026-04-02", "description": "DPS installment auto debit", "debit": 1500, "credit": 0, "balance": 4000 },
-        { "date": "2026-04-28", "description": "Monthly profit autocredit", "debit": 0, "credit": 320, "balance": 4320 },
-        { "date": "2026-05-02", "description": "DPS installment auto debit", "debit": 1500, "credit": 0, "balance": 2820 },
-        { "date": "2026-06-10", "description": "Member cash deposit", "debit": 0, "credit": 10000, "balance": 12820 },
-        { "date": "2026-07-02", "description": "DPS installment auto debit", "debit": 1500, "credit": 0, "balance": 11320 },
-        { "date": "2026-07-28", "description": "Monthly profit autocredit", "debit": 0, "credit": 380, "balance": 11700 },
-        { "date": "2026-08-02", "description": "DPS installment auto debit", "debit": 1500, "credit": 0, "balance": 10200 },
-        { "date": "2026-08-30", "description": "Member cash deposit", "debit": 0, "credit": 5000, "balance": 15200 }
+        { "date": "2026-03-14", "description": "Special Savings deposit auto debit", "debit": 2000, "credit": 0, "balance": -1000 },
+        { "date": "2026-03-15", "description": "Member cash deposit", "debit": 0, "credit": 6500, "balance": 5500 },
+        { "date": "2026-04-14", "description": "Special Savings deposit auto debit", "debit": 2000, "credit": 0, "balance": 3500 },
+        { "date": "2026-05-14", "description": "Special Savings deposit auto debit", "debit": 2000, "credit": 0, "balance": 1500 },
+        { "date": "2026-06-10", "description": "Member cash deposit", "debit": 0, "credit": 10000, "balance": 11500 },
+        { "date": "2026-07-14", "description": "Special Savings deposit auto debit", "debit": 2000, "credit": 0, "balance": 9500 },
+        { "date": "2026-08-14", "description": "Special Savings deposit auto debit", "debit": 2000, "credit": 0, "balance": 7500 },
+        { "date": "2026-08-30", "description": "Member cash deposit", "debit": 0, "credit": 10000, "balance": 17500 },
+        { "date": "2026-09-14", "description": "Special Savings deposit auto debit", "debit": 2000, "credit": 0, "balance": 15500 },
+        { "date": "2026-09-16", "description": "Monthly profit autocredit (Special Savings)", "debit": 0, "credit": 0, "balance": 15500 }
       ]
     },
     {
@@ -108,6 +120,62 @@
       "autoDebit": { "loanInstallment": false, "savingsInstallment": false },
       "transactions": [
         { "date": "2026-09-26", "description": "Account opening deposit", "debit": 0, "credit": 1200, "balance": 1200 }
+      ]
+    },
+    {
+      "accountNo": "AHSS-000305",
+      "memberNo": "MEM-102077",
+      "accountName": "Delwar Hossain",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "product": "General Savings",
+      "accountType": "Single",
+      "status": "Approved",
+      "balance": 3000,
+      "openingDate": "2026-08-01",
+      "nominee": { "name": "Rashida Begum", "relationship": "Spouse", "dob": "1982-03-03", "nid": "1982330033004", "percentage": 100 },
+      "autoDebit": { "loanInstallment": false, "savingsInstallment": false },
+      "transactions": [
+        { "date": "2026-08-01", "description": "Account opening deposit", "debit": 0, "credit": 3000, "balance": 3000 }
+      ]
+    },
+    {
+      "accountNo": "AHSS-000318",
+      "memberNo": "MEM-102188",
+      "accountName": "Shirin Aktar",
+      "project": "Progoti",
+      "branch": "Savar",
+      "product": "General Savings",
+      "accountType": "Single",
+      "status": "Approved",
+      "balance": 2200,
+      "openingDate": "2026-08-15",
+      "nominee": { "name": "Anwar Hossain", "relationship": "Spouse", "dob": "1990-06-06", "nid": "1990660066007", "percentage": 100 },
+      "autoDebit": { "loanInstallment": false, "savingsInstallment": false },
+      "transactions": [
+        { "date": "2026-08-15", "description": "Account opening deposit", "debit": 0, "credit": 2200, "balance": 2200 }
+      ]
+    },
+    {
+      "accountNo": "AHSS-000322",
+      "memberNo": "MEM-102299",
+      "accountName": "Abdul Karim",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "product": "General Savings",
+      "accountType": "Single",
+      "status": "Approved",
+      "balance": 24600,
+      "openingDate": "2026-05-01",
+      "nominee": { "name": "Momtaz Begum", "relationship": "Spouse", "dob": "1978-09-09", "nid": "1978990099000", "percentage": 100 },
+      "autoDebit": { "loanInstallment": true, "savingsInstallment": false },
+      "transactions": [
+        { "date": "2026-05-01", "description": "Account opening deposit", "debit": 0, "credit": 1000, "balance": 1000 },
+        { "date": "2026-05-10", "description": "Loan disbursement credit (LOAN-5004)", "debit": 0, "credit": 30000, "balance": 31000 },
+        { "date": "2026-06-10", "description": "Loan installment auto debit", "debit": 1600, "credit": 0, "balance": 29400 },
+        { "date": "2026-07-10", "description": "Loan installment auto debit", "debit": 1600, "credit": 0, "balance": 27800 },
+        { "date": "2026-08-10", "description": "Loan installment auto debit", "debit": 1600, "credit": 0, "balance": 26200 },
+        { "date": "2026-09-10", "description": "Loan installment auto debit", "debit": 1600, "credit": 0, "balance": 24600 }
       ]
     }
   ],
@@ -190,11 +258,84 @@
         "savingsProduct": "General Savings",
         "consent": true
       }
+    },
+    {
+      "id": "REQ-2004",
+      "memberNo": "MEM-101600",
+      "memberName": "Halima Khatun",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "requestType": "AHSS Account Opening",
+      "proposedBy": "CDO - Jasim Uddin",
+      "dcsApprovedBy": "BM/ABM - Kamal Hossain — Client could not confirm nominee details, please resubmit with correct info.",
+      "requestDate": "2026-09-21",
+      "status": "BM Rejected",
+      "formData": {
+        "projectLabel": "DABI (15)", "memberNo": "MEM-101600", "erpMemberNo": "ERP-48001", "memberName": "Halima Khatun",
+        "memberCategory": "General", "mobile": "01611002200", "accountType": "Single", "otpSendsTo": "Self",
+        "nominee": { "name": "Aminul Islam", "relationship": "Spouse", "dob": "1988-01-01", "nid": "1988110022003", "birthCert": "", "passport": "", "smartCard": "", "percentage": "100" },
+        "accountName": "Halima Khatun", "savingsProduct": "General Savings", "consent": true
+      }
+    },
+    {
+      "id": "REQ-2005",
+      "memberNo": "MEM-101733",
+      "memberName": "Kulsum Begum",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "requestType": "AHSS Account Opening",
+      "proposedBy": "CDO - Jasim Uddin",
+      "dcsApprovedBy": "BM/ABM - Kamal Hossain — Mobile number could not be verified, please recheck with the client.",
+      "requestDate": "2026-09-22",
+      "status": "BM Sendback",
+      "formData": {
+        "projectLabel": "DABI (15)", "memberNo": "MEM-101733", "erpMemberNo": "ERP-48112", "memberName": "Kulsum Begum",
+        "memberCategory": "General", "mobile": "01722003300", "accountType": "Single", "otpSendsTo": "Self",
+        "nominee": { "name": "Sattar Mia", "relationship": "Father", "dob": "1960-02-02", "nid": "1960220033004", "birthCert": "", "passport": "", "smartCard": "", "percentage": "100" },
+        "accountName": "Kulsum Begum", "savingsProduct": "General Savings", "consent": true
+      }
+    },
+    {
+      "id": "REQ-2006",
+      "memberNo": "MEM-101855",
+      "memberName": "Fahima Akter",
+      "project": "Progoti",
+      "branch": "Savar",
+      "requestType": "AHSS Account Opening",
+      "proposedBy": "CO - Habibur Rahman",
+      "dcsApprovedBy": "AM - Nasrin Sultana",
+      "requestDate": "2026-09-17",
+      "status": "ERP Rejected",
+      "formData": {
+        "projectLabel": "Progoti (60)", "memberNo": "MEM-101855", "erpMemberNo": "ERP-48223", "memberName": "Fahima Akter",
+        "memberCategory": "General", "mobile": "01833004400", "accountType": "Single", "otpSendsTo": "Self",
+        "nominee": { "name": "Rahim Uddin", "relationship": "Spouse", "dob": "1990-03-03", "nid": "1990330044005", "birthCert": "", "passport": "", "smartCard": "", "percentage": "100" },
+        "accountName": "Fahima Akter", "savingsProduct": "General Savings", "consent": true
+      }
+    },
+    {
+      "id": "REQ-2007",
+      "memberNo": "MEM-101966",
+      "memberName": "Nurjahan Ali",
+      "project": "BCUP",
+      "branch": "Cumilla Sadar",
+      "requestType": "AHSS Account Opening",
+      "proposedBy": "CO - Habibur Rahman",
+      "dcsApprovedBy": "Equivalent supervisor",
+      "requestDate": "2026-09-16",
+      "status": "ERP Sendback",
+      "formData": {
+        "projectLabel": "BCUP (279)", "memberNo": "MEM-101966", "erpMemberNo": "ERP-48334", "memberName": "Nurjahan Ali",
+        "memberCategory": "General", "mobile": "01944005500", "accountType": "Single", "otpSendsTo": "Self",
+        "nominee": { "name": "Ali Hossain", "relationship": "Spouse", "dob": "1984-04-04", "nid": "1984440055006", "birthCert": "", "passport": "", "smartCard": "", "percentage": "100" },
+        "accountName": "Nurjahan Ali", "savingsProduct": "General Savings", "consent": true
+      }
     }
   ],
   "continuationRequests": [
     {
       "id": "CR-3001",
+      "kind": "ahss",
       "memberNo": "MEM-100234",
       "memberName": "Rahima Begum",
       "project": "DABI",
@@ -212,20 +353,57 @@
     },
     {
       "id": "CR-3002",
+      "kind": "specialSavings",
       "memberNo": "MEM-100511",
       "memberName": "Salma Khatun",
       "project": "Progoti",
       "branch": "Savar",
-      "accountNo": "AHSS-000156",
+      "accountNo": "SSA-6001",
       "product": "Special Savings – DPS Installment Autodebit",
       "action": "Continue",
       "reason": "Renewal confirmation after DPS tenure review.",
       "proposedBy": "CO - Habibur Rahman",
       "requestDate": "2026-09-15",
-      "status": "ERP Pending",
+      "status": "ERP Approved",
       "dcsApprovedBy": "AM - Nasrin Sultana",
       "verification": "Both",
       "comment": "Confirmed with client via phone and branch visit. Client wants the DPS auto debit to continue as before."
+    },
+    {
+      "id": "CR-3003",
+      "kind": "ahss",
+      "memberNo": "MEM-101250",
+      "memberName": "Ayesha Siddika",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "accountNo": "AHSS-000201",
+      "product": "Loan Installment Auto Debit",
+      "action": "Continue",
+      "reason": "Client confirmed no issues with the current auto debit setup.",
+      "proposedBy": "CDO - Jasim Uddin",
+      "requestDate": "2026-09-23",
+      "status": "BM Rejected",
+      "dcsApprovedBy": "BM/ABM - Kamal Hossain — Not applicable, account has no active loan yet.",
+      "verification": "Verified by Phone",
+      "comment": "Confirmed with client via phone — Not applicable, account has no active loan yet."
+    },
+    {
+      "id": "CR-3004",
+      "kind": "ahss",
+      "memberNo": "MEM-102299",
+      "memberName": "Abdul Karim",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "accountNo": "AHSS-000322",
+      "product": "General Savings Installment Auto Debit",
+      "action": "Continue",
+      "reason": "Client wants to also route voluntary savings installments through AHSS.",
+      "proposedBy": "CDO - Jasim Uddin",
+      "requestDate": "2026-09-26",
+      "status": "ERP Sendback",
+      "dcsApprovedBy": "BM/ABM - Kamal Hossain",
+      "verification": "Verified Physically",
+      "comment": "Confirmed with client via branch visit — client visited branch and confirmed in person."
     }
   ],
   "specialSavingsApplications": [
@@ -290,6 +468,7 @@
       "proposedBy": "CO - Habibur Rahman",
       "requestDate": "2026-09-14",
       "status": "ERP Approved",
+      "linkedSsAccountNo": "SSA-6001",
       "bmApprover": "AM - Nasrin Sultana", "bmComment": "Confirmed with client via branch visit.",
       "erpApprover": "BAO - Nusrat Jahan", "erpComment": "Consent paper verified and signed.",
       "formData": {
@@ -302,6 +481,188 @@
         "insuranceInterested": true, "health1": "No", "health2": "No",
         "policyType": "Double", "premium": 9088,
         "secondInsured": { "name": "Karim Mia", "gender": "Male", "relationship": "Husband", "dob": "1978-05-14", "idType": "National ID", "idNumber": "1985674123456" }
+      }
+    },
+    {
+      "id": "SS-4004",
+      "enrollmentId": "b8b6a0b0-1234-4a12-9abc-1234567890ab",
+      "memberNo": "MEM-102410",
+      "memberName": "Nasrin Sultana",
+      "project": "BCUP",
+      "branch": "Cumilla Sadar",
+      "voCode": 2143,
+      "biometric": "No Biometric",
+      "proposedBy": "CO - Habibur Rahman",
+      "requestDate": "2026-09-20",
+      "status": "BM Rejected",
+      "bmApprover": "Equivalent supervisor — Client changed her mind, wants to reapply later with a lower deposit amount.",
+      "bmComment": "Client changed her mind, wants to reapply later with a lower deposit amount.",
+      "erpApprover": "", "erpComment": "",
+      "formData": {
+        "productName": "Long Term Monthly Deposit", "productSubType": "DPS", "savingsProductType": "Voluntary and Current Savings",
+        "depositAmount": 5000, "depositAmountWords": "Five Thousand", "tenureYears": 8,
+        "maturityAmount": 600000, "monthlyProfitAmount": null, "maturityDate": "2034-09-20",
+        "depositType": "Cash", "memberWantsToPay": "Yes",
+        "nominee1": { "type": "New", "name": "Anwar Sultan", "dob": "1988-08-08", "relationship": "Spouse", "idType": "National ID", "idNumber": "1988880099000", "percentage": "100", "phone": "01988009900" },
+        "nominee2": null, "guardian": null,
+        "insuranceInterested": true, "health1": "No", "health2": "No",
+        "policyType": "Single", "premium": 11360, "secondInsured": null
+      }
+    },
+    {
+      "id": "SS-4005",
+      "enrollmentId": "c9c7b1c1-2345-4b23-8bcd-2345678901bc",
+      "memberNo": "MEM-102521",
+      "memberName": "Monira Yasmin",
+      "project": "NCDP",
+      "branch": "Bogura Sadar",
+      "voCode": 3301,
+      "biometric": "No Biometric",
+      "proposedBy": "CDO - Jasim Uddin",
+      "requestDate": "2026-09-12",
+      "status": "ERP Sendback",
+      "bmApprover": "BM/ABM - Kamal Hossain", "bmComment": "Documents verified, forwarded for ERP review.",
+      "erpApprover": "BAO - Nusrat Jahan", "erpComment": "Nominee ID number does not match the uploaded document — please recheck with the client.",
+      "formData": {
+        "productName": "Long Term Monthly Deposit", "productSubType": "DPS", "savingsProductType": "Voluntary and Current Savings",
+        "depositAmount": 200, "depositAmountWords": "Two Hundred", "tenureYears": 3,
+        "maturityAmount": 2765, "monthlyProfitAmount": null, "maturityDate": "2029-09-12",
+        "depositType": "Cash", "memberWantsToPay": "Yes",
+        "nominee1": { "type": "New", "name": "Rafiq Islam", "dob": "1990-01-01", "relationship": "Spouse", "idType": "National ID", "idNumber": "1990001122334", "percentage": "100", "phone": "01599001122" },
+        "nominee2": null, "guardian": null,
+        "insuranceInterested": false, "health1": "", "health2": "",
+        "policyType": null, "premium": 0, "secondInsured": null
+      }
+    }
+  ],
+  "specialSavingsAccounts": [
+    {
+      "accountNo": "SSA-6001",
+      "applicationId": "SS-4003",
+      "memberNo": "MEM-100511",
+      "accountName": "Salma Khatun",
+      "project": "Progoti",
+      "branch": "Savar",
+      "productName": "Long Term Monthly Deposit",
+      "productSubType": "DPS",
+      "depositAmount": 2000,
+      "tenureYears": 10,
+      "maturityAmount": 324000,
+      "maturityDate": "2036-09-14",
+      "openingDate": "2026-09-14",
+      "status": "Active",
+      "balance": 8000,
+      "linkedAhssAccountNo": "AHSS-000156",
+      "autoCredit": { "monthlyProfit": true, "maturityAmount": true },
+      "autoDebit": { "dpsInstallment": true },
+      "insurance": { "policyType": "Double", "premium": 9088 },
+      "transactions": [
+        { "date": "2026-09-14", "description": "Special Savings deposit", "debit": 0, "credit": 2000, "balance": 2000 },
+        { "date": "2026-09-14", "description": "Chaya insurance premium (one-time)", "debit": 0, "credit": 0, "balance": 2000 }
+      ]
+    }
+  ],
+  "loanApplications": [
+    {
+      "id": "LOAN-5001",
+      "memberNo": "MEM-100234",
+      "memberName": "Rahima Begum",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "proposedBy": "CDO - Jasim Uddin",
+      "requestDate": "2026-04-01",
+      "status": "ERP Approved",
+      "bmApprover": "BM/ABM - Kamal Hossain", "bmComment": "Verified with client and VO.",
+      "erpApprover": "BAO - Nusrat Jahan", "erpComment": "Disbursement approved.",
+      "formData": {
+        "loanProduct": "Dabi General Loan", "amount": 30000, "tenureMonths": 12, "purpose": "Small business — grocery stock",
+        "disbursementMode": "AHSS", "collectionMode": "AHSS", "installmentAmount": 450
+      },
+      "linkedAhssAccountNo": "AHSS-000123",
+      "disbursementDate": "2026-04-05",
+      "outstandingPrincipal": 24500
+    },
+    {
+      "id": "LOAN-5002",
+      "memberNo": "MEM-102077",
+      "memberName": "Delwar Hossain",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "proposedBy": "CDO - Jasim Uddin",
+      "requestDate": "2026-09-27",
+      "status": "BM Pending",
+      "bmApprover": "", "bmComment": "", "erpApprover": "", "erpComment": "",
+      "formData": {
+        "loanProduct": "Small Enterprise Loan", "amount": 50000, "tenureMonths": 18, "purpose": "Hardware shop expansion",
+        "disbursementMode": "AHSS", "collectionMode": "AHSS", "installmentAmount": 2778
+      }
+    },
+    {
+      "id": "LOAN-5003",
+      "memberNo": "MEM-102188",
+      "memberName": "Shirin Aktar",
+      "project": "Progoti",
+      "branch": "Savar",
+      "proposedBy": "CO - Habibur Rahman",
+      "requestDate": "2026-09-24",
+      "status": "ERP Pending",
+      "bmApprover": "AM - Nasrin Sultana", "bmComment": "Verified with client, forwarded to ERP.",
+      "erpApprover": "", "erpComment": "",
+      "formData": {
+        "loanProduct": "Progoti Loan", "amount": 20000, "tenureMonths": 12, "purpose": "Tailoring materials",
+        "disbursementMode": "AHSS", "collectionMode": "Cash", "installmentAmount": 1667
+      }
+    },
+    {
+      "id": "LOAN-5004",
+      "memberNo": "MEM-102299",
+      "memberName": "Abdul Karim",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "proposedBy": "CDO - Jasim Uddin",
+      "requestDate": "2026-05-05",
+      "status": "ERP Approved",
+      "bmApprover": "BM/ABM - Kamal Hossain", "bmComment": "Verified with client and VO.",
+      "erpApprover": "BAO - Nusrat Jahan", "erpComment": "Disbursement approved.",
+      "formData": {
+        "loanProduct": "Small Enterprise Loan", "amount": 30000, "tenureMonths": 18, "purpose": "Tool shop restock",
+        "disbursementMode": "AHSS", "collectionMode": "AHSS", "installmentAmount": 1600
+      },
+      "linkedAhssAccountNo": "AHSS-000322",
+      "disbursementDate": "2026-05-10",
+      "outstandingPrincipal": 23600
+    },
+    {
+      "id": "LOAN-5005",
+      "memberNo": "MEM-100788",
+      "memberName": "Nasima Akter",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "proposedBy": "CDO - Jasim Uddin",
+      "requestDate": "2026-09-10",
+      "status": "BM Rejected",
+      "bmApprover": "BM/ABM - Kamal Hossain — Existing loan not yet cleared, cannot process a new application.",
+      "bmComment": "Existing loan not yet cleared, cannot process a new application.",
+      "erpApprover": "", "erpComment": "",
+      "formData": {
+        "loanProduct": "Dabi General Loan", "amount": 15000, "tenureMonths": 10, "purpose": "Sewing machine purchase",
+        "disbursementMode": "Cash", "collectionMode": "Cash", "installmentAmount": 1500
+      }
+    },
+    {
+      "id": "LOAN-5006",
+      "memberNo": "MEM-101855",
+      "memberName": "Fahima Akter",
+      "project": "Progoti",
+      "branch": "Savar",
+      "proposedBy": "CO - Habibur Rahman",
+      "requestDate": "2026-09-05",
+      "status": "ERP Rejected",
+      "bmApprover": "AM - Nasrin Sultana", "bmComment": "Verified with client, forwarded to ERP.",
+      "erpApprover": "BAO - Nusrat Jahan", "erpComment": "Credit history check pending — please resubmit after clearance.",
+      "formData": {
+        "loanProduct": "Progoti Loan", "amount": 40000, "tenureMonths": 15, "purpose": "Poultry farm setup",
+        "disbursementMode": "Cash", "collectionMode": "Cash", "installmentAmount": 2667
       }
     }
   ]
