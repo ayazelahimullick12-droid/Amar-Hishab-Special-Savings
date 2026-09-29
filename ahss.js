@@ -255,6 +255,37 @@ function findAccountByMember(memberNo){ return DB.accounts.find(a => a.memberNo 
 function findDuplicateMobile(mobile, excludeMemberNo){
   return DB.members.find(m => m.mobile === mobile && m.memberNo !== excludeMemberNo);
 }
+/* Every nominee already on file for a member, gathered from their AHSS
+   account, any AHSS enrollment request, and any Special Savings
+   application — normalized to one shape so "Existing" pickers everywhere
+   (AHSS form, Special Savings nominee 1/2) can share it. This is what
+   "Use existing nominee information" / নমিনি টাইপ: Existing actually
+   looks up, per the BRD, instead of being a decorative toggle. */
+function existingNomineesFor(memberNo){
+  const out = [];
+  const push = (n, label) => {
+    if(!n || !n.name) return;
+    out.push({
+      name: n.name, dob: n.dob || '', relationship: n.relationship || '', percentage: n.percentage || '100',
+      idType: n.idType || (n.nid ? 'National ID' : ''), idNumber: n.idNumber || n.nid || '', phone: n.phone || '',
+      label: `${n.name} (${n.relationship || '—'}) — ${label}`
+    });
+  };
+  const acct = findAccountByMember(memberNo);
+  if(acct) push(acct.nominee, `AHSS account ${acct.accountNo}`);
+  DB.ahssRequests.filter(r => r.memberNo === memberNo).forEach(r => push(r.formData && r.formData.nominee, `AHSS request ${r.id}`));
+  DB.specialSavingsApplications.filter(a => a.memberNo === memberNo).forEach(a => {
+    push(a.formData.nominee1, `Special Savings ${a.id}`);
+    push(a.formData.nominee2, `Special Savings ${a.id} (2nd nominee)`);
+  });
+  const seen = new Set();
+  return out.filter(n => {
+    const key = n.name + '|' + n.relationship + '|' + n.idNumber;
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 function projectLabel(code){
   const p = DB.projects.find(p => p.code === code);
   return p ? p.label : code;
@@ -676,9 +707,9 @@ function dcsEnrollForm(params){
   const draftKey = 'enroll_' + (params.memberNo || 'new');
   const draft = loadDraft(draftKey);
   const member = params.memberNo ? findMember(params.memberNo) : null;
-  const existingAccount = member ? findAccountByMember(member.memberNo) : null;
+  const nomineeCandidates = member ? existingNomineesFor(member.memberNo) : [];
   const fd = (draft && draft.data) || {};
-  const nominee = existingAccount ? existingAccount.nominee : {};
+  const nominee = nomineeCandidates[0] || {};
   return `
     <div class="draft-banner">💾 Draft saved automatically ${draft ? '· resumed from ' + new Date(draft.savedAt).toLocaleTimeString() : ''}</div>
     ${params.note ? `<div class="draft-banner" style="background:#DCEAF6;border-color:#b9d7ec;color:#1F4C6C;">${esc(params.note)}</div>` : ''}
@@ -730,9 +761,16 @@ function dcsEnrollForm(params){
     <div class="dcs-section-block">
       <div class="dcs-section-hd">Nominee Information</div>
       <div class="dcs-check-row">
-        <input type="checkbox" id="dcsUseExistingNominee" ${!existingAccount?'disabled':''} ${fd.useExisting?'checked':''}>
-        <span>Use existing nominee information ${!existingAccount?'<i>(no existing nominee on file for this member)</i>':''}</span>
+        <input type="checkbox" id="dcsUseExistingNominee" ${!nomineeCandidates.length?'disabled':''} ${fd.useExisting?'checked':''}>
+        <span>Use existing nominee information ${!nomineeCandidates.length?'<i>(no existing nominee on file for this member)</i>':''}</span>
       </div>
+      ${nomineeCandidates.length > 1 ? `
+      <div class="dcs-field" id="dcsExistingNomineeWrap" style="${fd.useExisting?'':'display:none;'}">
+        <label class="dcs-label">Select existing nominee</label>
+        <select class="dcs-select" id="dcsExistingNomineeSelect">
+          ${nomineeCandidates.map((c,i)=>`<option value="${i}" ${String(fd.existingNomineeIdx)===String(i)?'selected':''}>${esc(c.label)}</option>`).join('')}
+        </select>
+      </div>` : ''}
       <div class="dcs-field"><label class="dcs-label">Name <span class="req">*</span></label><input class="dcs-input" data-field="nomineeName" value="${esc(fd.nomineeName || nominee.name || '')}"></div>
       <div class="dcs-field"><label class="dcs-label">Date of Birth</label><input type="date" class="dcs-input" data-field="nomineeDob" value="${esc(fd.nomineeDob || nominee.dob || '')}"></div>
       <div class="dcs-field">
@@ -834,19 +872,28 @@ function wireDcsEnrollForm(v){
   });
 
   const useExisting = document.getElementById('dcsUseExistingNominee');
+  const existingSelect = document.getElementById('dcsExistingNomineeSelect');
+  const existingWrap = document.getElementById('dcsExistingNomineeWrap');
+  function applyExistingNominee(){
+    const memberNo = memberInput.value.trim();
+    const candidates = existingNomineesFor(memberNo);
+    const idx = existingSelect ? Number(existingSelect.value) : 0;
+    const c = candidates[idx];
+    if(!c) return;
+    form.querySelector('[data-field="nomineeName"]').value = c.name;
+    form.querySelector('[data-field="nomineeDob"]').value = c.dob;
+    form.querySelector('[data-field="nomineeRelationship"]').value = c.relationship;
+    form.querySelector('[data-field="nomineeNid"]').value = c.idNumber;
+    form.querySelector('[data-field="nomineePercentage"]').value = c.percentage;
+  }
   if(useExisting){
     useExisting.addEventListener('change', ()=>{
-      const memberNo = memberInput.value.trim();
-      const acct = findAccountByMember(memberNo);
-      if(useExisting.checked && acct){
-        const n = acct.nominee;
-        form.querySelector('[data-field="nomineeName"]').value = n.name;
-        form.querySelector('[data-field="nomineeDob"]').value = n.dob;
-        form.querySelector('[data-field="nomineeRelationship"]').value = n.relationship;
-        form.querySelector('[data-field="nomineeNid"]').value = n.nid;
-        form.querySelector('[data-field="nomineePercentage"]').value = n.percentage;
-      }
+      if(existingWrap) existingWrap.style.display = useExisting.checked ? '' : 'none';
+      if(useExisting.checked) applyExistingNominee();
     });
+  }
+  if(existingSelect){
+    existingSelect.addEventListener('change', applyExistingNominee);
   }
   const photoBox = document.getElementById('dcsNomineePhotoBox');
   const photoInput = document.getElementById('dcsNomineePhotoInput');
@@ -1165,7 +1212,7 @@ function dcsScreenAccount(params){
    ========================================================================== */
 const SS_STRUCTURAL_FIELDS = new Set([
   'productName','tenureYears','depositAmount','n1Percentage','n1Dob','n2Percentage','n2Dob',
-  'insuranceInterested','health1','health2','policyType','secondInsuredHealth1','secondInsuredHealth2'
+  'n1Type','n2Type','insuranceInterested','health1','health2','policyType','secondInsuredHealth1','secondInsuredHealth2'
 ]);
 ui.ssForm = null;
 
@@ -1463,6 +1510,38 @@ function ssDepositTypeChanged(radioEl){
 }
 
 /* -------------------- Step 3: Nominee Info -------------------- */
+function ssExistingNomineePicker(prefix){
+  const f = ui.ssForm;
+  const candidates = existingNomineesFor(f.memberNo);
+  if(!candidates.length){
+    return `<div class="dcs-subtle" style="margin:-6px 0 12px;">No existing nominee on file for this member yet — fill in a new one below.</div>`;
+  }
+  const idx = f[prefix+'ExistingIdx'] || '';
+  return `
+    <div class="dcs-field">
+      <label class="dcs-label">Select existing nominee</label>
+      <select class="dcs-select" onchange="ssPickExistingNominee('${prefix}', this.value)">
+        <option value="">-Select-</option>
+        ${candidates.map((c,i)=>`<option value="${i}" ${String(idx)===String(i)?'selected':''}>${esc(c.label)}</option>`).join('')}
+      </select>
+    </div>`;
+}
+function ssPickExistingNominee(prefix, idxStr){
+  const idx = Number(idxStr);
+  const candidates = existingNomineesFor(ui.ssForm.memberNo);
+  const c = candidates[idx];
+  if(!c) return;
+  ui.ssForm[prefix+'ExistingIdx'] = idxStr;
+  ui.ssForm[prefix+'Name'] = c.name;
+  ui.ssForm[prefix+'Dob'] = c.dob;
+  ui.ssForm[prefix+'Relationship'] = c.relationship;
+  ui.ssForm[prefix+'IdType'] = c.idType;
+  ui.ssForm[prefix+'IdNumber'] = c.idNumber;
+  ui.ssForm[prefix+'Percentage'] = c.percentage || '100';
+  ui.ssForm[prefix+'Phone'] = c.phone;
+  ssAutosave();
+  render();
+}
 function ssNomineeBlock(n, title){
   const f = ui.ssForm;
   const p = 'n'+n;
@@ -1477,6 +1556,7 @@ function ssNomineeBlock(n, title){
           <label class="dcs-radio"><input type="radio" name="${p}Type" value="New" data-field="${p}Type" ${f[p+'Type']!=='Existing'?'checked':''}> New</label>
         </div>
       </div>
+      ${f[p+'Type']==='Existing' ? ssExistingNomineePicker(p) : ''}
       <div class="dcs-field"><label class="dcs-label">Name <span class="req">*</span></label><input class="dcs-input" data-field="${p}Name" value="${esc(f[p+'Name']||'')}"></div>
       <div class="dcs-field"><label class="dcs-label">Date of Birth ${age!==null?`<span class="dcs-subtle">(Age: ${age})</span>`:''}</label><input type="date" class="dcs-input" data-field="${p}Dob" value="${esc(f[p+'Dob']||'')}"></div>
       <div class="dcs-field">

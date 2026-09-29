@@ -533,6 +533,30 @@
         "insuranceInterested": false, "health1": "", "health2": "",
         "policyType": null, "premium": 0, "secondInsured": null
       }
+    },
+    {
+      "id": "SS-4006",
+      "enrollmentId": "d1d8c2d2-3456-4c34-9cde-3456789012cd",
+      "memberNo": "MEM-102299",
+      "memberName": "Abdul Karim",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "voCode": 2090,
+      "biometric": "No Biometric",
+      "proposedBy": "CDO - Jasim Uddin",
+      "requestDate": "2026-09-18",
+      "status": "BM Pending",
+      "bmApprover": "", "bmComment": "", "erpApprover": "", "erpComment": "",
+      "formData": {
+        "productName": "Long Term Monthly Deposit", "productSubType": "DPS", "savingsProductType": "Voluntary and Current Savings",
+        "depositAmount": 1000, "depositAmountWords": "One Thousand", "tenureYears": 5,
+        "maturityAmount": 69000, "monthlyProfitAmount": null, "maturityDate": "2031-09-18",
+        "depositType": "AHSS", "memberWantsToPay": "Yes",
+        "nominee1": { "type": "New", "name": "Karim Hasan", "dob": "2005-03-12", "relationship": "Son", "idType": "Birth Certificate", "idNumber": "20050312000111", "percentage": "100", "phone": "01877008801" },
+        "nominee2": null, "guardian": null,
+        "insuranceInterested": true, "health1": "No", "health2": "No",
+        "policyType": "Single", "premium": 1420, "secondInsured": null
+      }
     }
   ],
   "specialSavingsAccounts": [
