@@ -1212,7 +1212,8 @@ function dcsScreenAccount(params){
    ========================================================================== */
 const SS_STRUCTURAL_FIELDS = new Set([
   'productName','tenureYears','depositAmount','n1Percentage','n1Dob','n2Percentage','n2Dob',
-  'n1Type','n2Type','insuranceInterested','health1','health2','policyType','secondInsuredHealth1','secondInsuredHealth2'
+  'n1Type','n2Type','insuranceInterested','health1','health2','policyType','secondInsuredHealth1','secondInsuredHealth2',
+  'autoCreditMonthlyProfit','autoCreditMaturity','autoDebitDps'
 ]);
 ui.ssForm = null;
 
@@ -1414,6 +1415,8 @@ function ssValidateStep(step){
   }
   if(step===2){
     if(!f.memberWantsToPay){ toast('Please answer whether the member wants to pay.'); return false; }
+    const anyAutoDc = f.autoCreditMonthlyProfit==='Yes' || f.autoCreditMaturity==='Yes' || f.autoDebitDps==='Yes';
+    if(anyAutoDc && !f.autoDcConsent){ toast('Please capture client consent for the auto credit/auto debit arrangement.'); return false; }
   }
   if(step===3){
     if(!f.n1Name || !f.n1Relationship || !f.n1IdType || !f.n1IdNumber || !f.n1Phone){ toast('Please complete the first nominee required fields.'); return false; }
@@ -1488,6 +1491,50 @@ function ssStep2(){
           <option ${f.memberWantsToPay==='No'?'selected':''}>No</option>
         </select>
       </div>
+    </div>
+    ${ssAutoDcSection()}`;
+}
+/* Per the BRD's "Special savings enrollment fields" spec: autocredit
+   (Monthly Profit to AHSS, Maturity amount to AHSS) and autodebit (DPS
+   installment from AHSS) are offered as Yes/No choices right here at
+   enrollment — with consent captured inline when set to Yes — not only
+   through the separate post-approval continuation/discontinuation
+   request (that one's for CHANGING the setting later, per A6). */
+function ssAutoDcSection(){
+  const f = ui.ssForm;
+  const acct = findAccountByMember(f.memberNo);
+  if(!acct){
+    return `<div class="draft-banner" style="background:#DCEAF6;border-color:#b9d7ec;color:#1F4C6C;">ℹ Auto credit/auto debit to AHSS becomes available once this member's AHSS account is ERP-approved — it can be set up afterward from AHSS → Auto Debit/Credit.</div>`;
+  }
+  const product = ssProduct(f.productName);
+  const isDps = !product || product.subType === 'DPS';
+  const anyYes = f.autoCreditMonthlyProfit==='Yes' || f.autoCreditMaturity==='Yes' || f.autoDebitDps==='Yes';
+  return `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">Auto Credit / Auto Debit to AHSS</div>
+      <div class="dcs-subtle" style="margin:-4px 0 10px;">Linked AHSS account: ${esc(acct.accountNo)}</div>
+      ${!isDps ? `
+      <div class="dcs-field"><label class="dcs-label">Monthly Profit to AHSS (autocredit)</label>
+        <select class="dcs-select" data-field="autoCreditMonthlyProfit">
+          <option ${f.autoCreditMonthlyProfit!=='Yes'?'selected':''}>No</option><option ${f.autoCreditMonthlyProfit==='Yes'?'selected':''}>Yes</option>
+        </select>
+      </div>` : ''}
+      <div class="dcs-field"><label class="dcs-label">Maturity Amount to AHSS (autocredit)</label>
+        <select class="dcs-select" data-field="autoCreditMaturity">
+          <option ${f.autoCreditMaturity!=='Yes'?'selected':''}>No</option><option ${f.autoCreditMaturity==='Yes'?'selected':''}>Yes</option>
+        </select>
+      </div>
+      ${isDps ? `
+      <div class="dcs-field"><label class="dcs-label">DPS Installment from AHSS (autodebit)</label>
+        <select class="dcs-select" data-field="autoDebitDps">
+          <option ${f.autoDebitDps!=='Yes'?'selected':''}>No</option><option ${f.autoDebitDps==='Yes'?'selected':''}>Yes</option>
+        </select>
+      </div>` : ''}
+      ${anyYes ? `
+      <div class="dcs-check-row" style="margin-top:6px;">
+        <input type="checkbox" data-field="autoDcConsent" ${f.autoDcConsent?'checked':''}>
+        <span>Client has agreed to this auto credit / auto debit arrangement <span class="req">*</span></span>
+      </div>` : ''}
     </div>`;
 }
 function ssDepositTypeChanged(radioEl){
@@ -1835,6 +1882,8 @@ function ssSubmit(){
       depositAmount: Number(f.depositAmount), depositAmountWords: numberToWords(f.depositAmount), tenureYears: Number(f.tenureYears),
       maturityAmount, monthlyProfitAmount, maturityDate: null,
       depositType: f.depositType, memberWantsToPay: f.memberWantsToPay,
+      autoCreditMonthlyProfit: f.autoCreditMonthlyProfit === 'Yes', autoCreditMaturity: f.autoCreditMaturity === 'Yes',
+      autoDebitDps: f.autoDebitDps === 'Yes', autoDcConsent: !!f.autoDcConsent,
       nominee1: { type:f.n1Type, name:f.n1Name, dob:f.n1Dob, relationship:f.n1Relationship, idType:f.n1IdType, idNumber:f.n1IdNumber, percentage:f.n1Percentage, phone:f.n1Phone },
       nominee2: Number(f.n1Percentage||100) < 100 ? { type:f.n2Type, name:f.n2Name, dob:f.n2Dob, relationship:f.n2Relationship, idType:f.n2IdType, idNumber:f.n2IdNumber, percentage:f.n2Percentage, phone:f.n2Phone } : null,
       guardian: f.guardianName ? { name:f.guardianName, idType:f.guardianIdType, idNumber:f.guardianIdNumber, relationship:f.guardianRelationship, phone:f.guardianPhone } : null,
@@ -1870,7 +1919,11 @@ function ssDetailRows(r){
       ${fd.maturityDate ? ssRow('Maturity Date', fmtDate(fd.maturityDate)) : ''}
     </div>
     <div class="dcs-section-hd" style="margin:14px -14px 10px;">Transaction information</div>
-    <div class="erp-readonly-summary">${ssRow('Deposit type', fd.depositType)} ${ssRow('Want to pay as a member?', fd.memberWantsToPay)}</div>
+    <div class="erp-readonly-summary">${ssRow('Deposit type', fd.depositType)} ${ssRow('Want to pay as a member?', fd.memberWantsToPay)}
+      ${fd.autoCreditMonthlyProfit ? ssRow('Monthly Profit to AHSS (autocredit)', 'Yes') : ''}
+      ${fd.autoCreditMaturity ? ssRow('Maturity Amount to AHSS (autocredit)', 'Yes') : ''}
+      ${fd.autoDebitDps ? ssRow('DPS Installment from AHSS (autodebit)', 'Yes') : ''}
+    </div>
     <div class="dcs-section-hd" style="margin:14px -14px 10px;">First Nominee Info</div>
     <div class="erp-readonly-summary">
       ${ssRow('Nominee Type', fd.nominee1.type)} ${ssRow('Nominee Name', fd.nominee1.name)} ${ssRow('Relationship', fd.nominee1.relationship)}
@@ -2916,7 +2969,7 @@ function erpSsDecide(id, status){
     r.erpComment = comment;
     if(status === 'ERP Approved'){
       const fd = r.formData;
-      const linkedAcct = fd.depositType === 'AHSS' ? findAccountByMember(r.memberNo) : null;
+      const linkedAcct = findAccountByMember(r.memberNo);
       const accountNo = newSsAccountNo();
       const sa = {
         accountNo, applicationId: r.id, memberNo: r.memberNo, accountName: r.memberName,
@@ -2927,10 +2980,13 @@ function erpSsDecide(id, status){
         transactions: [{ date: todayISO(), description: 'Special Savings account opened', debit: 0, credit: 0, balance: 0 }]
       };
       // Autocredit/autodebit-to-AHSS toggles (FR-11/FR-12) only make sense
-      // once this account is actually linked to an AHSS account.
+      // once this account is actually linked to an AHSS account. Seed them
+      // from whatever the member chose (with consent) at enrollment —
+      // changing them later goes through the separate continuation/
+      // discontinuation request (A6), not this approval.
       if(linkedAcct){
-        sa.autoCredit = { monthlyProfit: false, maturityAmount: false };
-        sa.autoDebit = { dpsInstallment: false };
+        sa.autoCredit = { monthlyProfit: !!fd.autoCreditMonthlyProfit, maturityAmount: !!fd.autoCreditMaturity };
+        sa.autoDebit = { dpsInstallment: !!fd.autoDebitDps };
       }
       if(fd.insuranceInterested) sa.insurance = { policyType: fd.policyType, premium: fd.premium };
       DB.specialSavingsAccounts.push(sa);
