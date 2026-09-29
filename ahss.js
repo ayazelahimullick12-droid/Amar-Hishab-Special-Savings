@@ -52,6 +52,7 @@ function newReqId(){ return 'REQ-' + Date.now(); }
 function newCrId(){ return 'CR-' + Date.now(); }
 function newSsId(){ return 'SS-' + Date.now(); }
 function newAcctNo(){ return 'AHSS-' + String(100000 + (Date.now() % 900000)).slice(0,6); }
+function newSsAccountNo(){ return 'SSA-' + String(600000 + (Date.now() % 90000)).slice(0,6); }
 function newEnrollmentGuid(){
   const h = () => Math.floor((1+Math.random())*0x10000).toString(16).slice(1);
   return `${h()}${h()}-${h()}-${h()}-${h()}-${h()}${h()}${h()}`;
@@ -405,6 +406,11 @@ function dcsOpenModule(mod){
 }
 function dcsSetRole(role){
   ui.dcsRole = role;
+  // Switching role is a big enough context change that a filter left over
+  // from browsing as the other role (e.g. a status filter that hides
+  // everything except "ERP Approved") should not silently keep hiding
+  // items the new role needs to see — reset all list filters.
+  ui.dcsListFilters = { ahss: { q:'', from:'', to:'', status:'' }, ss: { q:'', from:'', to:'', status:'' }, loan: { q:'', from:'', to:'', status:'' } };
   dcsGoHome();
 }
 
@@ -522,6 +528,19 @@ function dcsAhssMenu(){
     </div>`;
 }
 
+/* A filter silently hiding items (e.g. a leftover status filter after
+   switching roles) looks exactly like "my submission vanished" from the
+   user's side — so make an active filter visible and one tap to clear. */
+function dcsFilterBanner(scopeKey){
+  const f = ui.dcsListFilters[scopeKey];
+  const active = f.q || f.from || f.to || f.status;
+  if(!active) return '';
+  return `<div class="draft-banner" style="background:#FFF3D6;border-color:#F1D48C;color:#8a5a00;">
+    ⚠ Filters are narrowing this list${f.status ? ' (status: ' + esc(f.status) + ')' : ''}.
+    <button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="ui.dcsListFilters.${scopeKey}={q:'',from:'',to:'',status:''}; render();">Clear filters</button>
+  </div>`;
+}
+
 function dcsAhssHome(){
   const f = ui.dcsListFilters.ahss;
   let rows = DB.ahssRequests.slice();
@@ -564,6 +583,7 @@ function dcsAhssHome(){
       <option value="">All</option>
       ${STATUS_OPTIONS.map(s=>`<option ${f.status===s?'selected':''}>${esc(s)}</option>`).join('')}
     </select>
+    ${dcsFilterBanner('ahss')}
     ${dcsAhssMenu()}
     ${rows.map(card).join('') || '<div class="dcs-empty">No AHSS applications match.</div>'}
   `;
@@ -1218,6 +1238,7 @@ function dcsSsHome(){
       <option value="">All</option>
       ${STATUS_OPTIONS.map(s=>`<option ${f.status===s?'selected':''}>${esc(s)}</option>`).join('')}
     </select>
+    ${dcsFilterBanner('ss')}
     ${drafts.length ? `
       <div class="dcs-section-title">Drafts</div>
       ${drafts.map(d=>`
@@ -1398,17 +1419,21 @@ function ssStep1(){
 /* -------------------- Step 2: Transaction Info -------------------- */
 function ssStep2(){
   const f = ui.ssForm;
+  const depositType = f.depositType || 'Cash';
+  const acct = depositType === 'AHSS' ? findAccountByMember(f.memberNo) : null;
   return `
     <div class="dcs-section-block">
       <div class="dcs-section-hd">জমার তথ্য — Transaction Info</div>
       <div class="dcs-field">
-        <label class="dcs-label">Deposit Type <span class="req">*</span></label>
+        <label class="dcs-label">Deposit Type / Installment Collection Mode <span class="req">*</span></label>
         <div class="dcs-radio-row">
-          <label class="dcs-radio"><input type="checkbox" checked disabled> Cash</label>
-          <label class="dcs-radio disabled"><input type="checkbox" disabled> Bank <span class="dcs-badge-soon">Coming soon</span></label>
+          <label class="dcs-radio"><input type="radio" name="depositType" value="Cash" ${depositType==='Cash'?'checked':''} onclick="ssDepositTypeChanged(this)"> Cash</label>
+          <label class="dcs-radio disabled"><input type="radio" disabled> Bank <span class="dcs-badge-soon">Coming soon</span></label>
+          <label class="dcs-radio"><input type="radio" name="depositType" value="AHSS" ${depositType==='AHSS'?'checked':''} onclick="ssDepositTypeChanged(this)"> AHSS</label>
         </div>
-        <input type="hidden" data-field="depositType" value="Cash">
+        <input type="hidden" data-field="depositType" value="${esc(depositType)}">
       </div>
+      ${depositType==='AHSS' && acct ? aHssInfoCard(acct) : ''}
       <div class="dcs-field">
         <label class="dcs-label">Member wants to pay? <span class="req">*</span></label>
         <select class="dcs-select" data-field="memberWantsToPay">
@@ -1417,6 +1442,24 @@ function ssStep2(){
         </select>
       </div>
     </div>`;
+}
+function ssDepositTypeChanged(radioEl){
+  ui.ssForm.depositType = radioEl.value;
+  if(radioEl.value !== 'AHSS'){ ssAutosave(); render(); return; }
+  const memberNo = ui.ssForm.memberNo;
+  const acct = findAccountByMember(memberNo);
+  if(acct){
+    ssAutosave();
+    render();
+  } else {
+    openNoAccountModal(()=>{
+      dcsNavigate({ mod:'ahss', screen:'form', params:{ memberNo, note:'You can select AHSS as the installment collection mode once this account is ERP-approved. Until then this Special Savings application continues with the regular process.' } });
+    }, ()=>{
+      ui.ssForm.depositType = 'Cash';
+      ssAutosave();
+      render();
+    });
+  }
 }
 
 /* -------------------- Step 3: Nominee Info -------------------- */
@@ -1986,6 +2029,7 @@ function dcsLoanHome(){
       <option value="">All</option>
       ${STATUS_OPTIONS.map(s=>`<option ${f.status===s?'selected':''}>${esc(s)}</option>`).join('')}
     </select>
+    ${dcsFilterBanner('loan')}
     ${rows.map(card).join('') || '<div class="dcs-empty">No loan applications match.</div>'}
   `;
 }
@@ -2790,8 +2834,30 @@ function erpSsDecide(id, status){
     r.status = status;
     r.erpApprover = ERP_USER;
     r.erpComment = comment;
+    if(status === 'ERP Approved'){
+      const fd = r.formData;
+      const linkedAcct = fd.depositType === 'AHSS' ? findAccountByMember(r.memberNo) : null;
+      const accountNo = newSsAccountNo();
+      const sa = {
+        accountNo, applicationId: r.id, memberNo: r.memberNo, accountName: r.memberName,
+        project: r.project, branch: r.branch, productName: fd.productName, productSubType: fd.productSubType,
+        depositAmount: fd.depositAmount, tenureYears: fd.tenureYears,
+        maturityAmount: fd.maturityAmount, maturityDate: fd.maturityDate, openingDate: todayISO(), status: 'Active',
+        balance: 0, linkedAhssAccountNo: linkedAcct ? linkedAcct.accountNo : null,
+        transactions: [{ date: todayISO(), description: 'Special Savings account opened', debit: 0, credit: 0, balance: 0 }]
+      };
+      // Autocredit/autodebit-to-AHSS toggles (FR-11/FR-12) only make sense
+      // once this account is actually linked to an AHSS account.
+      if(linkedAcct){
+        sa.autoCredit = { monthlyProfit: false, maturityAmount: false };
+        sa.autoDebit = { dpsInstallment: false };
+      }
+      if(fd.insuranceInterested) sa.insurance = { policyType: fd.policyType, premium: fd.premium };
+      DB.specialSavingsAccounts.push(sa);
+      r.linkedSsAccountNo = accountNo;
+    }
     persist();
-    toast('Decision recorded: ' + status);
+    toast(status==='ERP Approved' ? `Approved. Special Savings account ${r.linkedSsAccountNo} opened.` : 'Decision recorded: ' + status);
     ui.erpReview = null;
     setErpTab('ssBuffer');
   }, { yesClass: status==='ERP Approved'?'btn-primary':(status==='ERP Rejected'?'btn-danger':'btn-outline') });
