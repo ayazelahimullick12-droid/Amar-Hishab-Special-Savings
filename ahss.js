@@ -1,5 +1,6 @@
 /* ==========================================================================
-   AHSS Prototype — data layer, navigation, shared modal helpers
+   AHSS + Special Savings/Chaya Insurance Prototype
+   Data layer, navigation, shared modal helpers
    ========================================================================== */
 let DB = null;
 
@@ -7,20 +8,32 @@ const FIELD_USER = 'CDO - Jasim Uddin';
 const APPROVER_USER = 'BM/ABM - Kamal Hossain';
 const ERP_USER = 'BAO - Nusrat Jahan';
 
+/* Exact status vocabulary from the production DCS app (Special Savings
+   Application screen's status filter) — reused for AHSS too so both
+   modules speak the same language on both DCS and ERP screens. */
+const STATUS_OPTIONS = ['BM Rejected','BM Sendback','BM Pending','ERP Sendback','ERP Rejected','ERP Approved','ERP Pending'];
+const ID_TYPE_OPTIONS = ['National ID','Birth Certificate','Smart Card','Passport'];
+
 const ui = {
   mode: 'dcs',
   dcsRole: 'field',
-  dcsView: { tab: 'enroll', screen: 'home', params: {} },
+  // Generic module/screen stack for the DCS mobile shell — replaces the old
+  // bottom-nav-tab model. dcs.mod is the active module ('home','ahss','ss',
+  // or a stub tile id); dcs.screen/params describe where inside that module.
+  dcs: { mod: 'home', screen: 'home', params: {} },
   dcsHistory: [],
   demoFlow: 'loan',
   erpMenu: 'savings',
+  erpSavingsBranch: 'ahss', // 'ahss' | 'special'
   erpTab: 'b2',
   erpB1Tab: 'opening',
   erpReview: null,
   erpFilters: { project: '', branch: '', from: '', to: '', status: '' },
+  ssErpFilters: { project: '', vo: '', from: '', to: '', status: '' },
   erpAccountQuery: '',
   erpSelectedAccount: null,
   dcsSelectedAccount: null,
+  dcsListFilters: { ahss: { q:'', from:'', to:'', status:'' }, ss: { q:'', from:'', to:'', status:'' } },
 };
 
 /* ---------------- date / id helpers ---------------- */
@@ -38,8 +51,56 @@ function fmtDate(iso){
 }
 function newReqId(){ return 'REQ-' + Date.now(); }
 function newCrId(){ return 'CR-' + Date.now(); }
+function newSsId(){ return 'SS-' + Date.now(); }
 function newAcctNo(){ return 'AHSS-' + String(100000 + (Date.now() % 900000)).slice(0,6); }
+function newEnrollmentGuid(){
+  const h = () => Math.floor((1+Math.random())*0x10000).toString(16).slice(1);
+  return `${h()}${h()}-${h()}-${h()}-${h()}-${h()}${h()}${h()}`;
+}
 function money(n){ return '৳' + Number(n||0).toLocaleString('en-US'); }
+function ageFromDob(dob){
+  if(!dob) return null;
+  const age = Math.floor((Date.now() - new Date(dob).getTime()) / 31557600000);
+  return age >= 0 ? age : null;
+}
+const ONES = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+const TENS = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+function numberToWords(n){
+  n = Math.round(Number(n)||0);
+  if(n === 0) return 'Zero';
+  function chunk(num){
+    let s = '';
+    if(num >= 100){ s += ONES[Math.floor(num/100)] + ' Hundred '; num %= 100; }
+    if(num >= 20){ s += TENS[Math.floor(num/10)] + ' '; num %= 10; }
+    if(num > 0) s += ONES[num] + ' ';
+    return s.trim();
+  }
+  const crore = Math.floor(n / 10000000); n %= 10000000;
+  const lakh = Math.floor(n / 100000); n %= 100000;
+  const thousand = Math.floor(n / 1000); n %= 1000;
+  let out = [];
+  if(crore) out.push(chunk(crore) + ' Crore');
+  if(lakh) out.push(chunk(lakh) + ' Lakh');
+  if(thousand) out.push(chunk(thousand) + ' Thousand');
+  if(n) out.push(chunk(n));
+  return out.join(' ').trim();
+}
+/* Simplified, clearly-artificial demo formulas — NOT BRAC's real DPS/Chaya
+   rate tables (those are proprietary actuarial charts). Good enough to make
+   the wizard's computed fields react sensibly to product/tenure/amount. */
+const SS_MATURITY_MULTIPLIER = { 3: 1.08, 5: 1.15, 8: 1.25, 10: 1.35 };
+function computeMaturity(monthly, tenureYears){
+  const mult = SS_MATURITY_MULTIPLIER[tenureYears] || 1.1;
+  return Math.round(Number(monthly||0) * tenureYears * 12 * mult);
+}
+function computeMonthlyProfit(lumpSum, tenureYears){
+  const rate = { 3: 0.08, 5: 0.10, 8: 0.115, 10: 0.12 }[tenureYears] || 0.09;
+  return Math.round(Number(lumpSum||0) * rate / 12);
+}
+function computePremium(monthly, tenureYears, policyType){
+  const base = Math.round(Number(monthly||0) * tenureYears * 0.284);
+  return policyType === 'Double' ? Math.round(base * 1.6) : base;
+}
 
 /* ---------------- persistence ---------------- */
 function persist(){
@@ -47,7 +108,8 @@ function persist(){
     localStorage.setItem('ahss_proto_state', JSON.stringify({
       accounts: DB.accounts,
       ahssRequests: DB.ahssRequests,
-      continuationRequests: DB.continuationRequests
+      continuationRequests: DB.continuationRequests,
+      specialSavingsApplications: DB.specialSavingsApplications
     }));
   }catch(e){ /* private mode / storage unavailable — state just won't survive reload */ }
 }
@@ -84,6 +146,7 @@ async function boot(){
       if(overlay.accounts) DB.accounts = overlay.accounts;
       if(overlay.ahssRequests) DB.ahssRequests = overlay.ahssRequests;
       if(overlay.continuationRequests) DB.continuationRequests = overlay.continuationRequests;
+      if(overlay.specialSavingsApplications) DB.specialSavingsApplications = overlay.specialSavingsApplications;
     }
     document.getElementById('loadingMsg').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
@@ -121,6 +184,9 @@ function toast(msg){
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=> el.classList.remove('show'), 2600);
 }
+function notImplemented(label){
+  toast((label ? label + ': ' : '') + 'not part of this prototype.');
+}
 
 /* ---------------- mode switch / top render ---------------- */
 function setMode(mode){
@@ -134,7 +200,7 @@ function render(){
   if(ui.mode === 'dcs') renderDCS(); else renderERP();
 }
 
-/* ---------------- generic confirm modal ---------------- */
+/* ---------------- generic confirm / info modal ---------------- */
 function showConfirm(title, msg, onYes, opts){
   opts = opts || {};
   document.getElementById('confirmTitle').textContent = title;
@@ -145,6 +211,7 @@ function showConfirm(title, msg, onYes, opts){
   yesBtn.textContent = opts.yesLabel || 'Yes';
   noBtn.textContent = opts.noLabel || 'No';
   yesBtn.className = 'btn ' + (opts.yesClass || 'btn-primary');
+  noBtn.style.display = opts.hideNo ? 'none' : '';
   const overlay = document.getElementById('confirmOverlay');
   overlay.classList.remove('hidden');
   yesBtn.onclick = () => { overlay.classList.add('hidden'); onYes(opts.getExtra ? opts.getExtra() : undefined); };
@@ -187,15 +254,15 @@ function projectLabel(code){
   return p ? p.label : code;
 }
 function statusChipClass(status){
-  if(status === 'Pending DCS Approval') return 'chip-dcs-pending';
-  if(status === 'Pending ERP Approval') return 'chip-erp-pending';
-  if(status === 'Approved') return 'chip-approved';
-  if(status === 'Rejected') return 'chip-rejected';
-  if(status === 'Sent Back to DCS') return 'chip-sentback';
+  if(status === 'BM Pending') return 'chip-dcs-pending';
+  if(status === 'ERP Pending') return 'chip-erp-pending';
+  if(status === 'ERP Approved') return 'chip-approved';
+  if(status === 'BM Rejected' || status === 'ERP Rejected') return 'chip-rejected';
+  if(status === 'BM Sendback' || status === 'ERP Sendback') return 'chip-sentback';
   return 'chip-dcs-pending';
 }
 
-/* ---------------- export helpers (B4 / A8 downloads) ---------------- */
+/* ---------------- export helpers (downloads) ---------------- */
 function downloadCSV(filename, headers, rows){
   const csv = [headers, ...rows].map(r => r.map(v => `"${String(v==null?'':v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -218,7 +285,7 @@ function printTable(title, headers, rows){
     tr:nth-child(even) td{background:#f5f8fa;}
   </style></head><body>
   <h2>${esc(title)}</h2>
-  <div class="meta">BRAC Microfinance — AHSS · Generated ${esc(todayDisplay())}</div>
+  <div class="meta">BRAC Microfinance · Generated ${esc(todayDisplay())}</div>
   <table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
   <tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>
   <script>window.onload = function(){ window.print(); };<\/script>
@@ -307,147 +374,201 @@ function openAdmissionModal(onYes, onNo){
 }
 
 /* ==========================================================================
-   PART A — DCS MOBILE APP
+   PART A — DCS MOBILE APP SHELL
+   A single generic module/screen stack replaces the old bottom-nav-tab
+   model, so it can host the real DCS Home dashboard grid plus however many
+   modules (AHSS, Special Savings, stub tiles) sit behind it.
    ========================================================================== */
 function dcsNavigate(view){
-  ui.dcsHistory.push(JSON.parse(JSON.stringify(ui.dcsView)));
-  ui.dcsView = view;
+  ui.dcsHistory.push(JSON.parse(JSON.stringify(ui.dcs)));
+  ui.dcs = view;
   render();
 }
 function dcsBack(){
-  if(ui.dcsHistory.length){ ui.dcsView = ui.dcsHistory.pop(); render(); }
+  if(ui.dcsHistory.length){ ui.dcs = ui.dcsHistory.pop(); render(); }
+  else dcsGoHome();
 }
-function dcsSwitchTab(tab){
-  ui.dcsView = { tab, screen: 'home', params: {} };
+function dcsGoHome(){
+  ui.dcs = { mod: 'home', screen: 'home', params: {} };
+  ui.dcsHistory = [];
+  render();
+}
+function dcsOpenModule(mod){
+  ui.dcs = { mod, screen: 'home', params: {} };
   ui.dcsHistory = [];
   render();
 }
 function dcsSetRole(role){
   ui.dcsRole = role;
-  ui.dcsView = { tab: ui.dcsView.tab, screen: 'home', params: {} };
-  ui.dcsHistory = [];
-  render();
+  dcsGoHome();
 }
 
-const DCS_TABS = [
-  { id: 'enroll', label: 'Enrollment', ic: '📝' },
-  { id: 'autodc', label: 'Auto Debit/Credit', ic: '🔁' },
-  { id: 'demo', label: 'Demo Flows', ic: '🧭' },
-  { id: 'account', label: 'Account View', ic: '📄' },
+const DCS_TILES_FIELD = [
+  { id: 'dashboard', label: 'Dashboard', ic: '▦', stub: true },
+  { id: 'volist', label: 'VO List', ic: '👥', stub: true },
+  { id: 'survey', label: 'Survey', ic: '📋', stub: true },
+  { id: 'admission', label: 'Admission', ic: '🪪', stub: true },
+  { id: 'profile', label: 'Profile Update', ic: '👤', stub: true },
+  { id: 'loan', label: 'Loan', ic: '📝', stub: true },
+  { id: 'insurance', label: 'Insurance Application', ic: '🛡', stub: true },
+  { id: 'ss', label: 'Special Savings Application', ic: '💰', stub: false },
+  { id: 'ahss', label: 'AHSS', ic: '🏦', stub: false },
 ];
+const DCS_TILES_APPROVER = DCS_TILES_FIELD.map(t => t.id === 'survey' ? { id:'polist', label:'PO List', ic:'📋', stub:true } : t);
 
-function dcsTitleFor(view, role){
-  const map = {
-    enroll: role === 'field' ? 'Amar Hishab Enrollment' : 'AHSS Opening Approvals',
-    autodc: role === 'field' ? 'Auto Debit/Credit' : 'Auto D/C Approvals',
-    demo: 'Demo: AHSS in other flows',
-    account: 'AHSS Account (view only)',
-  };
-  return map[view.tab] || 'AHSS';
+function dcsTilesForRole(){ return ui.dcsRole === 'field' ? DCS_TILES_FIELD : DCS_TILES_APPROVER; }
+
+function dcsAppBarTitle(){
+  if(ui.dcs.mod === 'home') return 'DCS Home';
+  if(ui.dcs.mod === 'ahss') return 'AHSS';
+  if(ui.dcs.mod === 'ss') return 'Special Savings Application';
+  const tile = dcsTilesForRole().find(t => t.id === ui.dcs.mod);
+  return tile ? tile.label : 'DCS';
 }
 
 function renderDCS(){
   const root = document.getElementById('dcsRoot');
-  const v = ui.dcsView;
   root.innerHTML = `
     <div class="dcs-shell">
-      <div class="dcs-topbar">
-        <div class="dcs-topbar-row">
-          ${ui.dcsHistory.length ? `<button class="dcs-icon-btn" onclick="dcsBack()">←</button>` : ''}
-          <div class="dcs-topbar-title">${esc(dcsTitleFor(v, ui.dcsRole))}</div>
-          <button class="dcs-icon-btn" title="Help" onclick="toast('Help audio / tips would play here.')">?</button>
-        </div>
+      <div class="dcs-appbar">
+        <button class="dcs-appbar-icon" onclick="${ui.dcs.mod==='home' ? "toast('Menu is not part of this prototype.')" : 'dcsBack()'}">${ui.dcs.mod==='home' ? '☰' : '←'}</button>
+        <div class="dcs-appbar-title">${esc(dcsAppBarTitle())}</div>
+        <button class="dcs-appbar-icon" onclick="toast('Notifications are not part of this prototype.')">🔔</button>
+        <div class="dcs-appbar-lang">En</div>
+        <button class="dcs-appbar-icon" onclick="dcsToggleRoleMenu()">⋮</button>
+      </div>
+      <div class="dcs-role-strip">
+        <span>Signed in as</span>
         <div class="dcs-role-switch">
-          <div class="dcs-role-opt ${ui.dcsRole==='field'?'active':''}" onclick="dcsSetRole('field')">CDO / CO (Field)</div>
-          <div class="dcs-role-opt ${ui.dcsRole==='approver'?'active':''}" onclick="dcsSetRole('approver')">BM / ABM (Approver)</div>
+          <div class="dcs-role-opt ${ui.dcsRole==='field'?'active':''}" onclick="dcsSetRole('field')">CDO / CO</div>
+          <div class="dcs-role-opt ${ui.dcsRole==='approver'?'active':''}" onclick="dcsSetRole('approver')">BM / ABM</div>
         </div>
       </div>
       <div class="dcs-body" id="dcsBody">${dcsBodyContent()}</div>
-      <div class="dcs-bottomnav">
-        ${DCS_TABS.map(t => `
-          <button class="dcs-nav-item ${v.tab===t.id?'active':''}" onclick="dcsSwitchTab('${t.id}')">
-            <span class="ic">${t.ic}</span>${esc(t.label)}
-          </button>`).join('')}
-      </div>
     </div>`;
   dcsWireScreen();
 }
+function dcsToggleRoleMenu(){ toast('Settings / language / Video Tutorial / Exit are not part of this prototype.'); }
 
 function dcsBodyContent(){
-  const v = ui.dcsView;
-  if(v.tab === 'enroll') return dcsScreenEnroll(v);
-  if(v.tab === 'autodc') return dcsScreenAutoDC(v);
-  if(v.tab === 'demo') return dcsScreenDemo(v);
-  if(v.tab === 'account') return dcsScreenAccount(v);
-  return '';
-}
-/* wireScreen() runs after every render — anything that can't be a plain
-   onclick="" string (blur handlers, debounced autosave) gets attached here */
-function dcsWireScreen(){
-  const v = ui.dcsView;
-  if(v.tab === 'enroll' && v.screen === 'form') wireDcsEnrollForm(v);
-  if(v.tab === 'autodc' && v.screen === 'form') wireDcsAutoDcForm(v);
+  const v = ui.dcs;
+  if(v.mod === 'home') return dcsHomeDashboard();
+  if(v.mod === 'ahss') return dcsAhssModule(v);
+  if(v.mod === 'ss') return dcsSsModule(v);
+  const tile = dcsTilesForRole().find(t => t.id === v.mod);
+  return `<div class="dcs-empty">${esc(tile ? tile.label : 'This screen')} is not part of this prototype.<br><br>Only <b>Special Savings Application</b> and <b>AHSS</b> are fully built out here.</div>`;
 }
 
-/* -------------------- Tab: Enrollment (A1 / A2 / A3 / A5 / A7) -------------------- */
-function dcsScreenEnroll(v){
-  if(v.screen === 'form') return dcsEnrollForm(v.params);
-  if(v.screen === 'detail') return dcsEnrollDetail(v.params);
-  return ui.dcsRole === 'field' ? dcsEnrollHomeField() : dcsEnrollHomeApprover();
-}
-
-function dcsEnrollHomeField(){
-  const requests = DB.ahssRequests.slice().sort((a,b)=> b.requestDate.localeCompare(a.requestDate));
+function dcsHomeDashboard(){
+  const memberHeader = ui.dcsRole === 'field'
+    ? '00269059 - JASIM UDDIN · 0605 - Gulshan'
+    : '00251412 - KAMAL HOSSAIN · 0605 - Gulshan';
   return `
-    <button class="btn btn-primary dcs-btn-block" onclick="dcsStartNewEnrollment()">+ New AHSS Enrollment</button>
-    <div class="dcs-card" style="background:#FBEDD2;border-color:#F1D48C;">
-      <div class="dcs-card-name" style="font-size:12.5px;">Simulate: new member admission</div>
-      <div class="dcs-card-meta" style="margin-bottom:8px;">During admission of a new member, CDO/CO is asked whether the client wants AHSS.</div>
-      <button class="btn btn-outline btn-sm" onclick="openAdmissionModal(dcsStartNewEnrollment, ()=>toast('Continuing admission as per regular procedure.'))">Simulate prompt</button>
+    <div class="dcs-home-header">${esc(memberHeader)}</div>
+    <div class="dcs-dashboard-grid">
+      ${dcsTilesForRole().map(t => `
+        <button class="dcs-tile ${t.id==='ahss'?'dcs-tile-new':''}" onclick='${t.stub ? `notImplemented(${JSON.stringify(t.label)})` : `dcsOpenModule("${t.id}")`}'>
+          ${t.id==='ahss' ? '<span class="dcs-tile-badge">NEW</span>' : ''}
+          <span class="dcs-tile-icon">${t.ic}</span>
+          <span class="dcs-tile-label">${esc(t.label)}</span>
+        </button>`).join('')}
     </div>
-    <div class="dcs-section-title" style="margin-top:16px;">Recently submitted</div>
-    ${requests.map(r => `
-      <div class="dcs-card" onclick="dcsNavigate({tab:'enroll',screen:'detail',params:{requestId:'${r.id}'}})">
-        <div class="dcs-card-row">
-          <div>
-            <div class="dcs-card-name">${esc(r.memberName)}</div>
-            <div class="dcs-card-meta">${esc(r.memberNo)} · ${esc(projectLabel(r.project))} · ${esc(fmtDate(r.requestDate))}</div>
-          </div>
-        </div>
-        <span class="chip ${statusChipClass(r.status)}">${esc(r.status)}</span>
-      </div>`).join('') || '<div class="dcs-empty">No AHSS enrollment requests yet.</div>'}
+    <div class="dcs-subtle" style="text-align:center;margin-top:18px;">Last Download Since 0 Days, 5 Hours, 38 Minutes</div>
   `;
 }
 
-function dcsEnrollHomeApprover(){
-  const requests = DB.ahssRequests.slice().sort((a,b)=> b.requestDate.localeCompare(a.requestDate));
-  const pending = requests.filter(r=> r.status==='Pending DCS Approval');
-  const rest = requests.filter(r=> r.status!=='Pending DCS Approval');
-  const card = (r, actionable) => `
+/* wireScreen() runs after every render — anything that can't be a plain
+   onclick="" string (blur handlers, debounced autosave) gets attached here */
+function dcsWireScreen(){
+  const v = ui.dcs;
+  if(v.mod === 'ahss' && v.screen === 'form') wireDcsEnrollForm(v);
+  if(v.mod === 'ahss' && v.screen === 'autodcForm') wireDcsAutoDcForm(v);
+  if(v.mod === 'ss' && v.screen === 'wizard') wireSsWizard(v);
+}
+
+/* ==========================================================================
+   MODULE: AHSS (re-platformed onto the DCS Home shell — list + detail,
+   no bottom nav; auto debit/credit, account view and the "AHSS inside other
+   flows" demo all nest inside this module instead of being separate tabs)
+   ========================================================================== */
+function dcsAhssModule(v){
+  if(v.screen === 'form') return dcsEnrollForm(v.params);
+  if(v.screen === 'detail') return dcsEnrollDetail(v.params);
+  if(v.screen === 'autodcHome') return ui.dcsRole === 'field' ? dcsAutoDcHomeField() : dcsAutoDcHomeApprover();
+  if(v.screen === 'autodcForm') return dcsAutoDcForm(v.params);
+  if(v.screen === 'autodcDetail') return dcsAutoDcDetail(v.params);
+  if(v.screen === 'account') return dcsScreenAccount(v.params);
+  if(v.screen === 'demo') return dcsScreenDemo();
+  return dcsAhssHome();
+}
+
+function dcsAhssMenu(){
+  const items = ui.dcsRole === 'field'
+    ? [['Auto Debit/Credit requests', "dcsNavigate({mod:'ahss',screen:'autodcHome',params:{}})"],
+       ['View an AHSS account', "dcsNavigate({mod:'ahss',screen:'account',params:{}})"],
+       ['Demo: AHSS in other flows', "dcsNavigate({mod:'ahss',screen:'demo',params:{}})"]]
+    : [['Auto Debit/Credit approvals', "dcsNavigate({mod:'ahss',screen:'autodcHome',params:{}})"],
+       ['View an AHSS account', "dcsNavigate({mod:'ahss',screen:'account',params:{}})"]];
+  return `
+    <div class="dcs-menu-row">
+      ${items.map(([label, action]) => `<button class="btn btn-outline btn-sm" onclick="${action}">${esc(label)}</button>`).join('')}
+    </div>`;
+}
+
+function dcsAhssHome(){
+  const f = ui.dcsListFilters.ahss;
+  let rows = DB.ahssRequests.slice();
+  if(ui.dcsRole === 'field') { /* field sees everything they can act on + submitted */ }
+  rows = rows.filter(r => {
+    if(f.q){ const q=f.q.toLowerCase(); if(!(r.memberName.toLowerCase().includes(q) || r.memberNo.toLowerCase().includes(q))) return false; }
+    if(f.from && r.requestDate < f.from) return false;
+    if(f.to && r.requestDate > f.to) return false;
+    if(f.status && r.status !== f.status) return false;
+    return true;
+  }).sort((a,b)=> b.requestDate.localeCompare(a.requestDate));
+
+  const card = (r) => {
+    const actionable = ui.dcsRole === 'approver' && r.status === 'BM Pending';
+    const acct = r.linkedAccountNo ? DB.accounts.find(a=>a.accountNo===r.linkedAccountNo) : null;
+    return `
     <div class="dcs-card">
       <div class="dcs-card-row">
         <div>
           <div class="dcs-card-name">${esc(r.memberName)}</div>
           <div class="dcs-card-meta">${esc(r.memberNo)} · ${esc(projectLabel(r.project))} · ${esc(fmtDate(r.requestDate))}</div>
-          <div class="dcs-card-meta">Proposed by ${esc(r.proposedBy)}</div>
+          <div class="dcs-card-meta">Proposed by ${esc(r.proposedBy)}${acct ? ' · Account ' + esc(acct.accountNo) : ''}</div>
         </div>
       </div>
       <div class="dcs-card-row" style="margin-top:8px;align-items:center;">
         <span class="chip ${statusChipClass(r.status)}">${esc(r.status)}</span>
-        <button class="btn btn-sm ${actionable?'btn-primary':'btn-ghost'}" onclick="dcsNavigate({tab:'enroll',screen:'detail',params:{requestId:'${r.id}',approverMode:true}})">${actionable?'Review':'View'}</button>
+        <button class="btn btn-sm ${actionable?'btn-primary':'btn-ghost'}" onclick="dcsNavigate({mod:'ahss',screen:'detail',params:{requestId:'${r.id}'}})">${actionable?'Review':'Details'}</button>
       </div>
     </div>`;
+  };
+
   return `
-    <div class="dcs-section-title">Pending your approval</div>
-    ${pending.map(r=>card(r,true)).join('') || '<div class="dcs-empty">Nothing waiting on you right now.</div>'}
-    <div class="dcs-section-title" style="margin-top:16px;">Other requests</div>
-    ${rest.map(r=>card(r,false)).join('') || '<div class="dcs-empty">—</div>'}
+    ${ui.dcsRole==='field' ? `<button class="btn btn-primary dcs-btn-block" onclick="dcsStartNewEnrollment()">+ New AHSS Enrollment</button>` : ''}
+    <input class="dcs-input" placeholder="Search by member number or name.." style="margin-bottom:10px;" value="${esc(f.q)}" oninput="ui.dcsListFilters.ahss.q=this.value; dcsRefreshAhssList();">
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input type="date" class="dcs-input" value="${esc(f.from)}" onchange="ui.dcsListFilters.ahss.from=this.value; render();">
+      <input type="date" class="dcs-input" value="${esc(f.to)}" onchange="ui.dcsListFilters.ahss.to=this.value; render();">
+    </div>
+    <select class="dcs-select" style="margin-bottom:12px;" onchange="ui.dcsListFilters.ahss.status=this.value; render();">
+      <option value="">All</option>
+      ${STATUS_OPTIONS.map(s=>`<option ${f.status===s?'selected':''}>${esc(s)}</option>`).join('')}
+    </select>
+    ${dcsAhssMenu()}
+    ${rows.map(card).join('') || '<div class="dcs-empty">No AHSS applications match.</div>'}
   `;
+}
+function dcsRefreshAhssList(){
+  const body = document.getElementById('dcsBody');
+  if(body) body.innerHTML = dcsBodyContent();
 }
 
 function dcsStartNewEnrollment(){
   openMemberSearch((member)=>{
-    dcsNavigate({ tab:'enroll', screen:'form', params:{ memberNo: member.memberNo } });
+    dcsNavigate({ mod:'ahss', screen:'form', params:{ memberNo: member.memberNo } });
   });
 }
 
@@ -473,7 +594,8 @@ function renderAccountSummary(fd){
 function dcsEnrollDetail(params){
   const r = DB.ahssRequests.find(x=>x.id===params.requestId);
   if(!r) return '<div class="dcs-empty">Request not found.</div>';
-  const actionable = params.approverMode && r.status === 'Pending DCS Approval';
+  const actionable = ui.dcsRole === 'approver' && r.status === 'BM Pending';
+  const acct = r.linkedAccountNo ? DB.accounts.find(a=>a.accountNo===r.linkedAccountNo) : null;
   return `
     <div class="dcs-section-block">
       <div class="dcs-section-hd">Request ${esc(r.id)}</div>
@@ -483,37 +605,43 @@ function dcsEnrollDetail(params){
       </div>
       ${renderAccountSummary(r.formData)}
     </div>
+    ${acct ? `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">Linked account</div>
+      <div class="erp-readonly-summary">
+        <div class="kv"><span>Account No.</span><span>${esc(acct.accountNo)}</span></div>
+        <div class="kv"><span>Balance</span><span>${money(acct.balance)}</span></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button class="btn btn-outline btn-sm" style="flex:1;" onclick="dcsNavigate({mod:'ahss',screen:'account',params:{accountNo:'${acct.accountNo}'}})">View account</button>
+        <button class="btn btn-outline btn-sm" style="flex:1;" onclick="dcsNavigate({mod:'ahss',screen:'autodcForm',params:{accountNo:'${acct.accountNo}'}})">Auto debit/credit</button>
+      </div>
+    </div>` : ''}
     ${actionable ? `
     <div class="dcs-section-block">
       <div class="dcs-section-hd">Approval decision</div>
-      <label class="dcs-label">Comment (optional)</label>
+      <label class="dcs-label">Comment (required for Send Back / Reject)</label>
       <textarea class="dcs-textarea" id="enrollApproveComment" placeholder="Notes for this decision…"></textarea>
-      <div style="display:flex;gap:10px;margin-top:10px;">
-        <button class="btn btn-danger" style="flex:1;" onclick="dcsRejectEnroll('${r.id}')">Reject</button>
-        <button class="btn btn-primary" style="flex:1;" onclick="dcsApproveEnroll('${r.id}')">Approve</button>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-danger" style="flex:1;" onclick="dcsDecideEnroll('${r.id}','BM Rejected')">Reject</button>
+        <button class="btn btn-ghost" style="flex:1;" onclick="dcsDecideEnroll('${r.id}','BM Sendback')">Send Back</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="dcsDecideEnroll('${r.id}','ERP Pending')">Approve</button>
       </div>
     </div>` : `<div class="dcs-subtle">Approval authority for ${esc(projectLabel(r.project))}: ${esc(DB.approvalAuthority[r.project]||'—')}.</div>`}
   `;
 }
-function dcsApproveEnroll(id){
+function dcsDecideEnroll(id, newStatus){
   const r = DB.ahssRequests.find(x=>x.id===id);
   const comment = (document.getElementById('enrollApproveComment')||{}).value || '';
-  showConfirm('Approve enrollment', `Approve the AHSS account opening request for ${r.memberName}? It will move to ERP for final approval.`, ()=>{
-    r.status = 'Pending ERP Approval';
+  if(newStatus !== 'ERP Pending' && !comment.trim()){ toast('A comment is required for Send Back or Reject.'); return; }
+  const verbs = { 'ERP Pending':'Approve', 'BM Sendback':'Send back', 'BM Rejected':'Reject' };
+  showConfirm(verbs[newStatus] + ' enrollment', `${verbs[newStatus]} the AHSS account opening request for ${r.memberName}?`, ()=>{
+    r.status = newStatus;
     r.dcsApprovedBy = APPROVER_USER + (comment ? ` — ${comment}` : '');
     persist();
-    toast('Approved. Sent to the ERP Consent Buffer Panel.');
-    dcsSwitchTab('enroll');
-  });
-}
-function dcsRejectEnroll(id){
-  showConfirm('Reject enrollment', 'Reject this AHSS account opening request?', ()=>{
-    const r = DB.ahssRequests.find(x=>x.id===id);
-    r.status = 'Rejected';
-    persist();
-    toast('Request rejected.');
-    dcsSwitchTab('enroll');
-  }, { yesClass:'btn-danger', yesLabel:'Reject' });
+    toast(newStatus==='ERP Pending' ? 'Approved. Sent to the ERP Consent Buffer Panel.' : 'Decision recorded: ' + newStatus);
+    dcsOpenModule('ahss');
+  }, { yesClass: newStatus==='BM Rejected'?'btn-danger':'btn-primary', yesLabel: verbs[newStatus] });
 }
 
 /* -------------------- A2: Account opening form -------------------- */
@@ -707,9 +835,9 @@ function wireDcsEnrollForm(v){
 }
 function dcsClearEnrollForm(){
   showConfirm('Clear form', 'Clear all entered data on this form?', ()=>{
-    const v = ui.dcsView;
+    const v = ui.dcs;
     clearDraft('enroll_' + (v.params.memberNo || 'new'));
-    dcsNavigate({ tab:'enroll', screen:'form', params:{} });
+    dcsNavigate({ mod:'ahss', screen:'form', params:{} });
   }, { yesClass:'btn-danger', yesLabel:'Clear' });
 }
 function dcsSubmitEnrollForm(draftKey){
@@ -732,7 +860,7 @@ function dcsSubmitEnrollForm(draftKey){
       proposedBy: FIELD_USER,
       dcsApprovedBy: '',
       requestDate: todayISO(),
-      status: 'Pending DCS Approval',
+      status: 'BM Pending',
       formData: {
         projectLabel: fd.projectLabel, memberNo: fd.memberNo, erpMemberNo: fd.erpMemberNo,
         memberName: fd.memberName, memberCategory: fd.memberCategory, mobile: fd.mobile,
@@ -744,12 +872,12 @@ function dcsSubmitEnrollForm(draftKey){
     DB.ahssRequests.unshift(rec);
     persist();
     clearDraft(draftKey);
-    toast('AHSS enrollment submitted for approval.');
-    dcsSwitchTab('enroll');
+    toast('AHSS enrollment submitted. Awaiting BM approval.');
+    dcsOpenModule('ahss');
   });
 }
 
-/* -------------------- Tab: Auto Debit/Credit (A6) -------------------- */
+/* -------------------- Auto Debit/Credit (A6), nested inside AHSS module -------------------- */
 const AUTODC_PRODUCTS = {
   loanInstallment: 'Loan Installment Auto Debit',
   savingsInstallment: 'General Savings Installment Auto Debit',
@@ -771,12 +899,6 @@ function accountFlagValue(a, key){
   if(key in (a.autoCredit||{})) return a.autoCredit[key];
   return false;
 }
-
-function dcsScreenAutoDC(v){
-  if(v.screen === 'form') return dcsAutoDcForm(v.params);
-  if(v.screen === 'detail') return dcsAutoDcDetail(v.params);
-  return ui.dcsRole === 'field' ? dcsAutoDcHomeField() : dcsAutoDcHomeApprover();
-}
 function dcsAutoDcHomeField(){
   return DB.accounts.map(a => `
     <div class="dcs-card">
@@ -794,13 +916,13 @@ function dcsAutoDcHomeField(){
             <span class="chip ${accountFlagValue(a,key)?'chip-approved':'chip-rejected'}">${accountFlagValue(a,key)?'ON':'OFF'}</span>
           </div>`).join('')}
       </div>
-      <button class="btn btn-outline btn-sm dcs-btn-block" style="margin-top:8px;" onclick="dcsNavigate({tab:'autodc',screen:'form',params:{accountNo:'${a.accountNo}'}})">Request Continue / Discontinue</button>
+      <button class="btn btn-outline btn-sm dcs-btn-block" style="margin-top:8px;" onclick="dcsNavigate({mod:'ahss',screen:'autodcForm',params:{accountNo:'${a.accountNo}'}})">Request Continue / Discontinue</button>
     </div>`).join('');
 }
 function dcsAutoDcHomeApprover(){
   const list = DB.continuationRequests.slice().sort((a,b)=> b.requestDate.localeCompare(a.requestDate));
-  const pending = list.filter(r=> r.status==='Pending DCS Approval');
-  const rest = list.filter(r=> r.status!=='Pending DCS Approval');
+  const pending = list.filter(r=> r.status==='BM Pending');
+  const rest = list.filter(r=> r.status!=='BM Pending');
   const card = (r, actionable) => `
     <div class="dcs-card">
       <div class="dcs-card-name">${esc(r.memberName)} <span style="font-weight:600;color:var(--muted);font-size:11.5px;">(${esc(r.accountNo)})</span></div>
@@ -808,7 +930,7 @@ function dcsAutoDcHomeApprover(){
       <div class="dcs-card-meta">Proposed by ${esc(r.proposedBy)} · ${esc(fmtDate(r.requestDate))}</div>
       <div class="dcs-card-row" style="margin-top:8px;align-items:center;">
         <span class="chip ${statusChipClass(r.status)}">${esc(r.status)}</span>
-        <button class="btn btn-sm ${actionable?'btn-primary':'btn-ghost'}" onclick="dcsNavigate({tab:'autodc',screen:'detail',params:{requestId:'${r.id}'}})">${actionable?'Review':'View'}</button>
+        <button class="btn btn-sm ${actionable?'btn-primary':'btn-ghost'}" onclick="dcsNavigate({mod:'ahss',screen:'autodcDetail',params:{requestId:'${r.id}'}})">${actionable?'Review':'View'}</button>
       </div>
     </div>`;
   return `
@@ -860,18 +982,18 @@ function dcsSubmitAutoDc(accountNo){
     DB.continuationRequests.unshift({
       id: newCrId(), memberNo: a.memberNo, memberName: a.accountName, project: a.project, branch: a.branch,
       accountNo: a.accountNo, product: fd.product, action: fd.action, reason: fd.reason,
-      proposedBy: FIELD_USER, requestDate: todayISO(), status: 'Pending DCS Approval',
+      proposedBy: FIELD_USER, requestDate: todayISO(), status: 'BM Pending',
       dcsApprovedBy: '', verification: '', comment: ''
     });
     persist();
     toast('Continuation/discontinuation request submitted.');
-    dcsSwitchTab('autodc');
+    dcsNavigate({ mod:'ahss', screen:'autodcHome', params:{} });
   });
 }
 function dcsAutoDcDetail(params){
   const r = DB.continuationRequests.find(x=>x.id===params.requestId);
   if(!r) return '<div class="dcs-empty">Request not found.</div>';
-  const actionable = r.status === 'Pending DCS Approval';
+  const actionable = r.status === 'BM Pending';
   return `
     <div class="dcs-section-block">
       <div class="dcs-section-hd">Request ${esc(r.id)}</div>
@@ -903,9 +1025,10 @@ function dcsAutoDcDetail(params){
       </select>
       <label class="dcs-label">Comment <span class="req">*</span></label>
       <textarea class="dcs-textarea" id="autodcCommentText" placeholder="Notes after contacting the client…"></textarea>
-      <div style="display:flex;gap:10px;margin-top:10px;">
-        <button class="btn btn-danger" style="flex:1;" onclick="dcsDecideAutoDc('${r.id}','Rejected')">Reject</button>
-        <button class="btn btn-primary" style="flex:1;" onclick="dcsDecideAutoDc('${r.id}','Pending ERP Approval')">Approve</button>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-danger" style="flex:1;" onclick="dcsDecideAutoDc('${r.id}','BM Rejected')">Reject</button>
+        <button class="btn btn-ghost" style="flex:1;" onclick="dcsDecideAutoDc('${r.id}','BM Sendback')">Send Back</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="dcsDecideAutoDc('${r.id}','ERP Pending')">Approve</button>
       </div>
     </div>` : ''}
   `;
@@ -915,19 +1038,19 @@ function dcsDecideAutoDc(id, newStatus){
   const reasonSel = (document.getElementById('autodcCommentSelect')||{}).value || '';
   const text = (document.getElementById('autodcCommentText')||{}).value || '';
   if(!verif || !text.trim()){ toast('Verification and a comment are required.'); return; }
-  showConfirm(newStatus==='Rejected'?'Reject request':'Approve request', 'Confirm this decision?', ()=>{
+  showConfirm(newStatus==='ERP Pending'?'Approve request':'Confirm decision', 'Confirm this decision?', ()=>{
     const r = DB.continuationRequests.find(x=>x.id===id);
     r.status = newStatus;
     r.dcsApprovedBy = APPROVER_USER;
     r.verification = verif;
     r.comment = (reasonSel ? reasonSel + ' — ' : '') + text;
     persist();
-    toast(newStatus==='Rejected' ? 'Request rejected.' : 'Approved. Sent to ERP Consent Buffer Panel.');
-    dcsSwitchTab('autodc');
-  }, { yesClass: newStatus==='Rejected' ? 'btn-danger' : 'btn-primary', yesLabel: newStatus==='Rejected'?'Reject':'Approve' });
+    toast(newStatus==='ERP Pending' ? 'Approved. Sent to ERP Consent Buffer Panel.' : 'Decision recorded: ' + newStatus);
+    dcsNavigate({ mod:'ahss', screen:'autodcHome', params:{} });
+  }, { yesClass: newStatus==='BM Rejected' ? 'btn-danger' : 'btn-primary', yesLabel: newStatus==='ERP Pending'?'Approve':'Confirm' });
 }
 
-/* -------------------- Tab: Demo Flows (A4) -------------------- */
+/* -------------------- A4: Demo — AHSS inside other DCS flows -------------------- */
 function dcsSetDemoFlow(f){ ui.demoFlow = f; render(); }
 function memberOptions(selected){
   return DB.members.map(m=>`<option value="${esc(m.memberNo)}" ${selected===m.memberNo?'selected':''}>${esc(m.name)} — ${esc(m.memberNo)}</option>`).join('');
@@ -949,7 +1072,7 @@ function aHssInfoCard(a){
       </div>
     </div>`;
 }
-function dcsHandleModeSelect(selectEl, memberSelId, resultDivId, formTab){
+function dcsHandleModeSelect(selectEl, memberSelId, resultDivId){
   const memberNo = document.getElementById(memberSelId).value;
   const resultDiv = document.getElementById(resultDivId);
   if(selectEl.value !== 'AHSS'){ resultDiv.innerHTML=''; return; }
@@ -958,8 +1081,7 @@ function dcsHandleModeSelect(selectEl, memberSelId, resultDivId, formTab){
     resultDiv.innerHTML = aHssInfoCard(acct);
   } else {
     openNoAccountModal(()=>{
-      dcsSwitchTab('enroll');
-      dcsNavigate({ tab:'enroll', screen:'form', params:{ memberNo, note:'You can select the AHSS account after ERP approval. Until then the proposal continues with the regular process.' } });
+      dcsNavigate({ mod:'ahss', screen:'form', params:{ memberNo, note:'You can select the AHSS account after ERP approval. Until then the proposal continues with the regular process.' } });
     }, ()=>{ selectEl.value = 'Cash'; resultDiv.innerHTML=''; });
   }
 }
@@ -974,7 +1096,7 @@ function dcsScreenDemo(){
     <div class="dcs-chip-tab">
       ${chips.map(c=>`<button class="${ui.demoFlow===c.id?'active':''}" onclick="dcsSetDemoFlow('${c.id}')">${esc(c.label)}</button>`).join('')}
     </div>
-    <div class="dcs-subtle">These screens simulate where AHSS is offered as a disbursement / collection / autocredit-autodebit option inside existing DCS flows (spec section A4).</div>
+    <div class="dcs-subtle">These screens simulate where AHSS is offered as a disbursement / collection / autocredit-autodebit option inside existing DCS flows.</div>
     ${ui.demoFlow==='loan' ? dcsDemoLoan() : ''}
     ${ui.demoFlow==='savings' ? dcsDemoSavings() : ''}
     ${ui.demoFlow==='csi' ? dcsDemoCsi() : ''}
@@ -996,7 +1118,7 @@ function dcsDemoLoan(){
       <div id="loanCollResult"></div>
       <div class="dcs-toggle-row" style="margin-top:8px;">
         <span class="dcs-toggle-label">Auto debit loan installment from AHSS</span>
-        <button class="dcs-toggle" id="loanAutoDebitToggle" onclick="dcsToggleAutoDebit('loanMember','loanInstallment', this)"></button>
+        <button class="dcs-toggle" id="loanAutoDebitToggle" onclick="dcsToggleAutoDebit('loanMember','loanInstallment')"></button>
       </div>
     </div>`;
 }
@@ -1052,7 +1174,7 @@ function dcsCsiCollect(){
   const method = (document.querySelector('input[name="csiMethod"]:checked')||{}).value;
   if(method !== 'AHSS'){ toast(`Collected ${money(amt)} in cash.`); return; }
   const acct = findAccountByMember(memberNo);
-  if(!acct){ openNoAccountModal(()=>{ dcsSwitchTab('enroll'); dcsNavigate({tab:'enroll',screen:'form',params:{memberNo}}); }); return; }
+  if(!acct){ openNoAccountModal(()=>{ dcsNavigate({mod:'ahss',screen:'form',params:{memberNo}}); }); return; }
   if(acct.balance < amt){ openInsufficientModal(); return; }
   showConfirm('Collect premium', `Deduct ${money(amt)} from AHSS account ${acct.accountNo}?`, ()=>{
     acct.balance -= amt;
@@ -1062,7 +1184,7 @@ function dcsCsiCollect(){
     render();
   });
 }
-function dcsToggleAutoDebit(memberSelId, key, btn){
+function dcsToggleAutoDebit(memberSelId, key){
   const memberNo = document.getElementById(memberSelId).value;
   const acct = findAccountByMember(memberNo);
   if(!acct){ toast('No AHSS account for this member.'); return; }
@@ -1112,8 +1234,9 @@ function dcsSpecialRender(){
   `;
 }
 
-/* -------------------- Tab: Account View (A8) -------------------- */
-function dcsScreenAccount(){
+/* -------------------- A8: Account View -------------------- */
+function dcsScreenAccount(params){
+  if(params && params.accountNo) ui.dcsSelectedAccount = params.accountNo;
   if(!ui.dcsSelectedAccount && DB.accounts.length) ui.dcsSelectedAccount = DB.accounts[0].accountNo;
   const a = DB.accounts.find(x=>x.accountNo===ui.dcsSelectedAccount);
   setRowsCache('AHSS_Transactions_Mobile', a ? a.transactions.map(t=>[t.date,t.description,t.debit||'',t.credit||'',t.balance]) : []);
@@ -1147,18 +1270,685 @@ function dcsScreenAccount(){
 }
 
 /* ==========================================================================
+   MODULE: Special Savings Application + Chaya Insurance (new, per the
+   "Guideline: Special Savings & Chaya Insurance Enrollment through DCS")
+   ========================================================================== */
+const SS_STRUCTURAL_FIELDS = new Set([
+  'productName','tenureYears','depositAmount','n1Percentage','n1Dob','n2Percentage','n2Dob',
+  'insuranceInterested','health1','health2','policyType','secondInsuredHealth1','secondInsuredHealth2'
+]);
+ui.ssForm = null;
+
+function dcsSsModule(v){
+  if(v.screen === 'chayaInfo') return dcsSsChayaInfo();
+  if(v.screen === 'wizard') return dcsSsWizard(v.params.step || 1);
+  if(v.screen === 'preview') return dcsSsPreview();
+  if(v.screen === 'detail') return dcsSsDetail(v.params);
+  return dcsSsHome();
+}
+
+function ssDraftKeysForMember(memberNo){ return 'ss_' + memberNo; }
+function ssListDrafts(){
+  const out = [];
+  try{
+    Object.keys(localStorage).forEach(k=>{
+      if(k.startsWith('ahss_draft_ss_')){
+        const d = JSON.parse(localStorage.getItem(k) || 'null');
+        if(d && d.data) out.push(d.data);
+      }
+    });
+  }catch(e){}
+  return out;
+}
+
+function dcsSsHome(){
+  const f = ui.dcsListFilters.ss;
+  let rows = DB.specialSavingsApplications.slice().filter(r => {
+    if(f.q){ const q=f.q.toLowerCase(); if(!(r.memberName.toLowerCase().includes(q) || r.memberNo.toLowerCase().includes(q))) return false; }
+    if(f.from && r.requestDate < f.from) return false;
+    if(f.to && r.requestDate > f.to) return false;
+    if(f.status && r.status !== f.status) return false;
+    return true;
+  }).sort((a,b)=> b.requestDate.localeCompare(a.requestDate));
+
+  const card = (r) => {
+    const actionable = ui.dcsRole === 'approver' && r.status === 'BM Pending';
+    return `
+    <div class="dcs-card">
+      <div class="dcs-card-meta" style="display:flex;justify-content:space-between;">
+        <span>Application Date: ${esc(fmtDate(r.requestDate))}</span><span>VO Code: ${esc(r.voCode||'—')}</span>
+      </div>
+      <div class="dcs-card-meta" style="word-break:break-all;">Enrollment Id: ${esc(r.enrollmentId)}</div>
+      <div class="dcs-card-meta">Member No: ${esc(r.memberNo)}</div>
+      <div class="dcs-card-name">${esc(r.memberName)}</div>
+      <div class="dcs-card-meta" style="color:${r.biometric==='No Biometric'?'var(--danger)':'var(--warn)'};font-weight:700;">Biometric: ${esc(r.biometric)}</div>
+      <div class="dcs-card-meta">Product Name: ${esc(r.formData.productName)}</div>
+      <div class="dcs-card-meta">Product Sub Type: ${esc(r.formData.productSubType)}</div>
+      <div class="dcs-card-meta">Savings Product Type: ${esc(r.formData.savingsProductType)}</div>
+      <div class="dcs-card-meta">Deposit Amount: ${money(r.formData.depositAmount)}</div>
+      ${r.formData.premium ? `<div class="dcs-card-meta">Premium Amount: ${money(r.formData.premium)}</div>` : ''}
+      <div class="dcs-card-row" style="margin-top:8px;align-items:center;">
+        <span class="chip ${statusChipClass(r.status)}">${esc(r.status)}</span>
+        <button class="btn btn-sm ${actionable?'btn-primary':'btn-ghost'}" onclick="dcsNavigate({mod:'ss',screen:'detail',params:{id:'${r.id}'}})">${actionable?'Review':'Details'}</button>
+      </div>
+    </div>`;
+  };
+
+  const drafts = ssListDrafts();
+  return `
+    ${ui.dcsRole==='field' ? `<button class="btn btn-primary dcs-btn-block" onclick="dcsSsStartNew()">+ New Special Savings Application</button>` : ''}
+    <button class="btn btn-outline btn-sm dcs-btn-block" onclick="dcsNavigate({mod:'ss',screen:'chayaInfo',params:{}})">🛡 ছায়া-সঞ্চয় নিরাপত্তা বিমাসুবিধা তথ্য — Chaya Insurance Benefit Info</button>
+    <input class="dcs-input" placeholder="Search by member number or name.." style="margin-bottom:10px;" value="${esc(f.q)}" oninput="ui.dcsListFilters.ss.q=this.value; dcsRefreshSsList();">
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input type="date" class="dcs-input" value="${esc(f.from)}" onchange="ui.dcsListFilters.ss.from=this.value; render();">
+      <input type="date" class="dcs-input" value="${esc(f.to)}" onchange="ui.dcsListFilters.ss.to=this.value; render();">
+    </div>
+    <select class="dcs-select" style="margin-bottom:12px;" onchange="ui.dcsListFilters.ss.status=this.value; render();">
+      <option value="">All</option>
+      ${STATUS_OPTIONS.map(s=>`<option ${f.status===s?'selected':''}>${esc(s)}</option>`).join('')}
+    </select>
+    ${drafts.length ? `
+      <div class="dcs-section-title">Drafts</div>
+      ${drafts.map(d=>`
+        <div class="dcs-card">
+          <div class="dcs-card-name">${esc(d.memberName||'(unnamed)')}</div>
+          <div class="dcs-card-meta">${esc(d.memberNo||'')} · saved locally</div>
+          <button class="btn btn-outline btn-sm dcs-btn-block" style="margin-top:8px;" onclick="dcsSsResumeDraft('${esc(d.memberNo)}')">Resume application</button>
+        </div>`).join('')}
+      <div class="dcs-section-title" style="margin-top:16px;">Applications</div>` : ''}
+    ${rows.map(card).join('') || '<div class="dcs-empty">No Special Savings applications match.</div>'}
+  `;
+}
+function dcsRefreshSsList(){
+  const body = document.getElementById('dcsBody');
+  if(body) body.innerHTML = dcsBodyContent();
+}
+
+function dcsSsChayaInfo(){
+  return `
+    <div class="dcs-section-block" style="background:linear-gradient(160deg,#fff,#fde9f2);">
+      <div class="dcs-section-hd" style="background:linear-gradient(90deg,var(--brac-pink),var(--brac-pink-dark));">🛡 ছায়া-সঞ্চয় নিরাপত্তা বিমার সুবিধাসমূহ — Chaya Savings Shield Insurance Benefits</div>
+      <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7;color:var(--ink);">
+        <li>Full DPS maturity value paid to the nominee before maturity, with dividend (conditions apply).</li>
+        <li>One more family member of the client can be brought under this insurance (Double policy).</li>
+        <li>Affordable one-time premium, paid together with the DPS deposit.</li>
+        <li>Simple conditions and fast insurance claim settlement.</li>
+      </ul>
+      <div class="dcs-subtle" style="margin-top:10px;">Premium chart, DPS chart, leaflet and full terms &amp; conditions are shown here in the production app; kept out of this prototype for brevity — the wizard still computes and shows a premium for demo purposes.</div>
+    </div>
+    <button class="btn btn-ghost dcs-btn-block" onclick="dcsBack()">Back</button>
+  `;
+}
+
+/* -------------------- Starting / resuming an application -------------------- */
+function dcsSsStartNew(){
+  openMemberSearch((member)=>{
+    ui.ssForm = {
+      memberNo: member.memberNo, erpMemberNo: member.erpMemberNo, memberName: member.name,
+      memberCategory: member.category, mobile: member.mobile, project: member.project, branch: member.branch,
+      voCode: 2090 + (member.memberNo.length % 5) * 10,
+      productName: '', tenureYears: '', depositAmount: '',
+      depositType: 'Cash', memberWantsToPay: 'Yes',
+      n1Type: 'New', n1Percentage: '100', n2Type: 'New',
+      insuranceInterested: '', health1: '', health2: '', policyType: 'Single',
+      secondInsuredHealth1: '', secondInsuredHealth2: ''
+    };
+    dcsNavigate({ mod:'ss', screen:'wizard', params:{ step:1 } });
+  });
+}
+function dcsSsResumeDraft(memberNo){
+  const d = loadDraft(ssDraftKeysForMember(memberNo));
+  if(!d){ toast('Draft not found.'); return; }
+  ui.ssForm = d.data;
+  dcsNavigate({ mod:'ss', screen:'wizard', params:{ step: d.data.__step || 1 } });
+}
+function ssAutosave(){
+  if(!ui.ssForm || !ui.ssForm.memberNo) return;
+  saveDraft(ssDraftKeysForMember(ui.ssForm.memberNo), ui.ssForm);
+}
+
+/* -------------------- Wizard shell -------------------- */
+const SS_STEPS = [
+  { n:1, label:'Savings Info', ic:'ⓘ' },
+  { n:2, label:'Transaction Info', ic:'📄' },
+  { n:3, label:'Nominee Info', ic:'👤' },
+  { n:4, label:'Insurance Info', ic:'🛡' },
+];
+function ssStepHeader(active){
+  return `
+    <div class="dcs-stepper">
+      ${SS_STEPS.map(s=>`<div class="dcs-step ${s.n===active?'active':''} ${s.n<active?'done':''}"><span class="dcs-step-ic">${s.ic}</span><span class="dcs-step-label">${esc(s.label)}</span></div>`).join('')}
+    </div>`;
+}
+function dcsSsWizard(step){
+  if(!ui.ssForm){ return '<div class="dcs-empty">No application in progress. Go back and start a new one.</div>'; }
+  const f = ui.ssForm;
+  f.__step = step;
+  const member = { memberNo:f.memberNo, name:f.memberName };
+  return `
+    <div class="dcs-card" style="margin-bottom:10px;">
+      <div class="dcs-card-row"><span class="dcs-card-meta">VO Code: ${esc(f.voCode)}</span><span class="dcs-card-meta">Member No: ${esc(f.memberNo)}</span></div>
+      <div class="dcs-card-name">${esc(f.memberName)}</div>
+    </div>
+    ${ssStepHeader(step)}
+    <form id="ssWizardFormEl">
+      ${step===1 ? ssStep1() : ''}
+      ${step===2 ? ssStep2() : ''}
+      ${step===3 ? ssStep3() : ''}
+      ${step===4 ? ssStep4() : ''}
+    </form>
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      ${step>1 ? `<button class="btn btn-ghost" style="flex:1;" onclick="ssGoStep(${step-1})">Back</button>` : `<button class="btn btn-ghost" style="flex:1;" onclick="dcsBack()">Cancel</button>`}
+      ${step<4 ? `<button class="btn btn-primary" style="flex:2;" onclick="ssGoStep(${step+1})">Next</button>` : `<button class="btn btn-primary" style="flex:2;" onclick="ssGoPreview()">Preview</button>`}
+    </div>
+  `;
+}
+function wireSsWizard(){
+  const form = document.getElementById('ssWizardFormEl');
+  if(!form) return;
+  fillForm(form, ui.ssForm);
+  form.addEventListener('change', (e)=>{
+    const key = e.target.dataset.field;
+    if(!key) return;
+    // Merge into ui.ssForm FIRST, then dispatch — health1/health2/
+    // secondInsuredHealth* have their own follow-up logic (toast / warning
+    // modal) that reads ui.ssForm, so it must see the just-changed value
+    // rather than firing from an inline onchange before this merge happens.
+    Object.assign(ui.ssForm, collectForm(form));
+    ssAutosave();
+    if(key === 'health1' || key === 'health2'){ ssHealthChanged(); return; }
+    if(key === 'secondInsuredHealth1' || key === 'secondInsuredHealth2'){ ssSecondInsuredHealthChanged(); return; }
+    if(SS_STRUCTURAL_FIELDS.has(key)) render();
+  });
+}
+function ssGoStep(n){
+  const form = document.getElementById('ssWizardFormEl');
+  if(form) Object.assign(ui.ssForm, collectForm(form));
+  if(n > (ui.dcs.params.step||1) && !ssValidateStep(ui.dcs.params.step||1)) return;
+  ssAutosave();
+  dcsNavigate({ mod:'ss', screen:'wizard', params:{ step:n } });
+}
+function ssValidateStep(step){
+  const f = ui.ssForm;
+  if(step===1){
+    if(!f.productName || !f.depositAmount || !f.tenureYears){ toast('Please complete product, deposit amount and tenure.'); return false; }
+  }
+  if(step===2){
+    if(!f.memberWantsToPay){ toast('Please answer whether the member wants to pay.'); return false; }
+  }
+  if(step===3){
+    if(!f.n1Name || !f.n1Relationship || !f.n1IdType || !f.n1IdNumber || !f.n1Phone){ toast('Please complete the first nominee required fields.'); return false; }
+    if(Number(f.n1Percentage) < 100 && (!f.n2Name || !f.n2Relationship)){ toast('Distribution is under 100% — please add second nominee details.'); return false; }
+    if(ageFromDob(f.n1Dob) !== null && ageFromDob(f.n1Dob) < 18 && (!f.guardianName || !f.guardianIdNumber)){ toast('The nominee is under 18 — guardian details are required.'); return false; }
+  }
+  return true;
+}
+
+/* -------------------- Step 1: Savings Info -------------------- */
+function ssProduct(name){ return DB.specialSavingsProducts.find(p=>p.name===name); }
+function ssStep1(){
+  const f = ui.ssForm;
+  const product = ssProduct(f.productName);
+  const isDps = !product || product.subType === 'DPS';
+  let computedLabel = 'Maturity Amount', computedValue = '';
+  if(product && f.depositAmount && f.tenureYears){
+    if(isDps){ computedValue = money(computeMaturity(f.depositAmount, Number(f.tenureYears))); }
+    else { computedLabel = 'Monthly Profit Amount'; computedValue = money(computeMonthlyProfit(f.depositAmount, Number(f.tenureYears))); }
+  }
+  return `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">বিশেষ সঞ্চয় এর তথ্য — Special Savings Info</div>
+      <div class="dcs-field">
+        <label class="dcs-label">Product Name <span class="req">*</span></label>
+        <select class="dcs-select" data-field="productName">
+          <option value="">Select Product</option>
+          ${DB.specialSavingsProducts.map(p=>`<option value="${esc(p.name)}" ${f.productName===p.name?'selected':''}>${esc(p.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="dcs-field">
+        <label class="dcs-label">Deposit Amount <span class="req">*</span></label>
+        <select class="dcs-select" data-field="depositAmount">
+          <option value="">Select</option>
+          ${(product?product.depositAmounts:[]).map(a=>`<option value="${a}" ${String(f.depositAmount)===String(a)?'selected':''}>${money(a)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="dcs-field"><label class="dcs-label">Deposit Amount (in words)</label><input class="dcs-input" readonly value="${esc(f.depositAmount ? numberToWords(f.depositAmount) : '')}"></div>
+      <div class="dcs-field">
+        <label class="dcs-label">Tenure (years) <span class="req">*</span></label>
+        <select class="dcs-select" data-field="tenureYears">
+          <option value="">Select</option>
+          ${(product?product.tenureYears:[]).map(y=>`<option value="${y}" ${String(f.tenureYears)===String(y)?'selected':''}>${y}.0</option>`).join('')}
+        </select>
+      </div>
+      <div class="dcs-field"><label class="dcs-label">${esc(computedLabel)}</label><input class="dcs-input" readonly value="${esc(computedValue)}"></div>
+    </div>`;
+}
+
+/* -------------------- Step 2: Transaction Info -------------------- */
+function ssStep2(){
+  const f = ui.ssForm;
+  return `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">জমার তথ্য — Transaction Info</div>
+      <div class="dcs-field">
+        <label class="dcs-label">Deposit Type <span class="req">*</span></label>
+        <div class="dcs-radio-row">
+          <label class="dcs-radio"><input type="checkbox" checked disabled> Cash</label>
+          <label class="dcs-radio disabled"><input type="checkbox" disabled> Bank <span class="dcs-badge-soon">Coming soon</span></label>
+        </div>
+        <input type="hidden" data-field="depositType" value="Cash">
+      </div>
+      <div class="dcs-field">
+        <label class="dcs-label">Member wants to pay? <span class="req">*</span></label>
+        <select class="dcs-select" data-field="memberWantsToPay">
+          <option ${f.memberWantsToPay==='Yes'?'selected':''}>Yes</option>
+          <option ${f.memberWantsToPay==='No'?'selected':''}>No</option>
+        </select>
+      </div>
+    </div>`;
+}
+
+/* -------------------- Step 3: Nominee Info -------------------- */
+function ssNomineeBlock(n, title){
+  const f = ui.ssForm;
+  const p = 'n'+n;
+  const age = ageFromDob(f[p+'Dob']);
+  return `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">${esc(title)}</div>
+      <div class="dcs-field">
+        <label class="dcs-label">Nominee Type</label>
+        <div class="dcs-radio-row">
+          <label class="dcs-radio"><input type="radio" name="${p}Type" value="Existing" data-field="${p}Type" ${f[p+'Type']==='Existing'?'checked':''}> Existing</label>
+          <label class="dcs-radio"><input type="radio" name="${p}Type" value="New" data-field="${p}Type" ${f[p+'Type']!=='Existing'?'checked':''}> New</label>
+        </div>
+      </div>
+      <div class="dcs-field"><label class="dcs-label">Name <span class="req">*</span></label><input class="dcs-input" data-field="${p}Name" value="${esc(f[p+'Name']||'')}"></div>
+      <div class="dcs-field"><label class="dcs-label">Date of Birth ${age!==null?`<span class="dcs-subtle">(Age: ${age})</span>`:''}</label><input type="date" class="dcs-input" data-field="${p}Dob" value="${esc(f[p+'Dob']||'')}"></div>
+      <div class="dcs-field">
+        <label class="dcs-label">Relationship <span class="req">*</span></label>
+        <select class="dcs-select" data-field="${p}Relationship">
+          <option value="">Select</option>
+          ${DB.relationshipOptions.map(o=>`<option ${f[p+'Relationship']===o?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="dcs-field">
+        <label class="dcs-label">ID Type <span class="req">*</span></label>
+        <select class="dcs-select" data-field="${p}IdType">
+          <option value="">Select</option>
+          ${ID_TYPE_OPTIONS.map(o=>`<option ${f[p+'IdType']===o?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="dcs-field"><label class="dcs-label">ID Number <span class="req">*</span></label><input class="dcs-input" data-field="${p}IdNumber" value="${esc(f[p+'IdNumber']||'')}"></div>
+      <div class="dcs-field"><label class="dcs-label">Distribution rate (%) <span class="req">*</span></label><input class="dcs-input" data-field="${p}Percentage" value="${esc(f[p+'Percentage']|| (n===1?'100':''))}"></div>
+      <div class="dcs-field"><label class="dcs-label">Phone Number <span class="req">*</span></label><input class="dcs-input" data-field="${p}Phone" value="${esc(f[p+'Phone']||'')}"></div>
+      <div class="dcs-field">
+        <label class="dcs-label">Photo <span class="req">*</span></label>
+        <div class="dcs-photo-box" id="ss${p}PhotoBox" onclick="document.getElementById('ss${p}PhotoInput').click()">📷 Tap to capture / upload nominee photo</div>
+        <input type="file" accept="image/*" id="ss${p}PhotoInput" style="display:none;" onchange="ssPhotoPicked('${p}',this)">
+      </div>
+    </div>`;
+}
+function ssPhotoPicked(prefix, input){
+  if(input.files[0]){
+    const box = document.getElementById('ss'+prefix+'PhotoBox');
+    box.textContent = '✓ ' + input.files[0].name;
+    box.classList.add('has-photo');
+    ui.ssForm[prefix+'HasPhoto'] = true;
+  }
+}
+function ssGuardianBlock(){
+  const f = ui.ssForm;
+  return `
+    <div class="dcs-section-block" style="border-color:#F1D48C;background:#FFFBF0;">
+      <div class="dcs-section-hd" style="background:var(--warn);">১৮ বছরের কম বয়সী নমিনির ক্ষেত্রে বৈধ অভিভাবকের তথ্য — Guardian info (nominee under 18)</div>
+      <div class="dcs-field"><label class="dcs-label">Guardian Name <span class="req">*</span></label><input class="dcs-input" data-field="guardianName" value="${esc(f.guardianName||'')}"></div>
+      <div class="dcs-field">
+        <label class="dcs-label">Guardian ID Type <span class="req">*</span></label>
+        <select class="dcs-select" data-field="guardianIdType">
+          <option value="">Select</option>
+          ${ID_TYPE_OPTIONS.map(o=>`<option ${f.guardianIdType===o?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="dcs-field"><label class="dcs-label">Guardian ID Number <span class="req">*</span></label><input class="dcs-input" data-field="guardianIdNumber" value="${esc(f.guardianIdNumber||'')}"></div>
+      <div class="dcs-field">
+        <label class="dcs-label">Relationship with Nominee <span class="req">*</span></label>
+        <select class="dcs-select" data-field="guardianRelationship">
+          <option value="">Select</option>
+          ${DB.relationshipOptions.map(o=>`<option ${f.guardianRelationship===o?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="dcs-field"><label class="dcs-label">Guardian Phone Number <span class="req">*</span></label><input class="dcs-input" data-field="guardianPhone" value="${esc(f.guardianPhone||'')}"></div>
+      <div class="dcs-field">
+        <label class="dcs-label">Guardian NID Photo (front) <span class="req">*</span></label>
+        <div class="dcs-photo-box" id="ssGuardianPhotoBox" onclick="document.getElementById('ssGuardianPhotoInput').click()">📷 Tap to capture / upload</div>
+        <input type="file" accept="image/*" id="ssGuardianPhotoInput" style="display:none;" onchange="ssPhotoPicked('guardian',this)">
+      </div>
+    </div>`;
+}
+function ssStep3(){
+  const f = ui.ssForm;
+  const needsSecond = Number(f.n1Percentage||100) < 100;
+  const n1Age = ageFromDob(f.n1Dob);
+  const needsGuardian = n1Age !== null && n1Age < 18;
+  return `
+    ${ssNomineeBlock(1, '১ম নমিনি তথ্য — 1st Nominee Info')}
+    ${needsSecond ? ssNomineeBlock(2, 'দ্বিতীয় নমিনির তথ্য — 2nd Nominee Info') : ''}
+    ${needsGuardian ? ssGuardianBlock() : ''}
+  `;
+}
+
+/* -------------------- Step 4: Insurance Info -------------------- */
+function ssSetInsuranceInterest(val){
+  if(val === 'No'){
+    showConfirm('সতর্কতা! Warning', 'আপনি কি ছায়া বিমাসুবিধা ছাড়া ডিপিএস খুলতে নিশ্চিত? Are you sure you want to open DPS without the Chaya insurance benefit?', ()=>{
+      ui.ssForm.insuranceInterested = 'No';
+      ssAutosave(); render();
+    }, { yesLabel:'DPS without insurance', yesClass:'btn-danger', noLabel:'DPS with insurance', onNo:()=>{
+      ui.ssForm.insuranceInterested = 'Yes'; ssAutosave(); render();
+    }});
+  } else {
+    ui.ssForm.insuranceInterested = 'Yes';
+    ssAutosave(); render();
+  }
+}
+function ssHealthChanged(){
+  const f = ui.ssForm;
+  if(f.health1 === 'Yes' || f.health2 === 'Yes'){
+    toast('Insurance benefit does not apply due to the health declaration — DPS will open without Chaya insurance.');
+  }
+  render();
+}
+function ssSecondInsuredHealthChanged(){
+  const f = ui.ssForm;
+  if(f.secondInsuredHealth1 === 'Yes' || f.secondInsuredHealth2 === 'Yes'){
+    showConfirm('সতর্কতা! Warning', 'নির্বাচিত ২য় বিমাগ্রহীতার স্বাস্থ্যগত কারণে দ্বৈত বিমা প্রযোজ্য হবে না। The selected 2nd insured is not eligible for double insurance due to a health condition.', ()=>{
+      ui.ssForm.policyType = 'Single';
+      ui.ssForm.secondInsuredHealth1 = ''; ui.ssForm.secondInsuredHealth2 = '';
+      ssAutosave(); render();
+    }, { yesLabel:'Proceed with single insurance', noLabel:'Change 2nd insured', onNo:()=>{
+      ui.ssForm.secondInsuredName=''; ui.ssForm.secondInsuredHealth1=''; ui.ssForm.secondInsuredHealth2='';
+      ssAutosave(); render();
+    }});
+  } else render();
+}
+function ssStep4(){
+  const f = ui.ssForm;
+  const healthy = f.health1==='No' && f.health2==='No';
+  const eligible = f.insuranceInterested==='Yes' && healthy;
+  if(eligible) f.premium = computePremium(f.depositAmount, Number(f.tenureYears)||0, f.policyType);
+  return `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">বিমা সংক্রান্ত তথ্য — Insurance Info</div>
+      <div class="dcs-field">
+        <label class="dcs-label">গ্রাহক কি ছায়া-সঞ্চয় নিরাপত্তা বিমা সুবিধা গ্রহণে আগ্রহী? — Interested in Chaya insurance? <span class="req">*</span></label>
+        <div class="dcs-radio-row">
+          <label class="dcs-radio"><input type="radio" name="insInterest" ${f.insuranceInterested==='Yes'?'checked':''} onclick="ssSetInsuranceInterest('Yes')"> Yes</label>
+          <label class="dcs-radio"><input type="radio" name="insInterest" ${f.insuranceInterested==='No'?'checked':''} onclick="ssSetInsuranceInterest('No')"> No</label>
+        </div>
+      </div>
+    </div>
+    ${f.insuranceInterested==='Yes' ? `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">গ্রাহকের স্বাস্থ্য সম্পর্কিত তথ্য — Client health info</div>
+      <div class="dcs-subtle">If either answer is "Yes", the insurance benefit will not apply — but the DPS can still open without it.</div>
+      <div class="dcs-field">
+        <label class="dcs-label">Cancer / kidney disease or treatment in the past 1 year? <span class="req">*</span></label>
+        <div class="dcs-radio-row">
+          <label class="dcs-radio"><input type="radio" name="health1" value="No" data-field="health1" ${f.health1==='No'?'checked':''}> No</label>
+          <label class="dcs-radio"><input type="radio" name="health1" value="Yes" data-field="health1" ${f.health1==='Yes'?'checked':''}> Yes</label>
+        </div>
+      </div>
+      <div class="dcs-field">
+        <label class="dcs-label">Jaundice / liver disease or treatment for over 3 months? <span class="req">*</span></label>
+        <div class="dcs-radio-row">
+          <label class="dcs-radio"><input type="radio" name="health2" value="No" data-field="health2" ${f.health2==='No'?'checked':''}> No</label>
+          <label class="dcs-radio"><input type="radio" name="health2" value="Yes" data-field="health2" ${f.health2==='Yes'?'checked':''}> Yes</label>
+        </div>
+      </div>
+    </div>
+    ${healthy ? `
+    <div class="dcs-section-block">
+      <div class="dcs-field">
+        <label class="dcs-label">বিমা পলিসির ধরণ — Insurance Policy Type <span class="req">*</span></label>
+        <select class="dcs-select" data-field="policyType">
+          <option value="Single" ${f.policyType==='Single'?'selected':''}>Single</option>
+          <option value="Double" ${f.policyType==='Double'?'selected':''}>Double</option>
+        </select>
+      </div>
+      <div class="dcs-field"><label class="dcs-label">বিমার প্রিমিয়াম — Insurance Premium</label><input class="dcs-input" readonly value="${money(f.premium)}"></div>
+    </div>
+    ${f.policyType==='Double' ? `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">২য় বিমাগ্রহীতার স্বাস্থ্য সম্পর্কিত তথ্য — 2nd insured's health info</div>
+      <div class="dcs-field">
+        <label class="dcs-label">Cancer / kidney disease or treatment in the past 1 year?</label>
+        <div class="dcs-radio-row">
+          <label class="dcs-radio"><input type="radio" name="si1" value="No" data-field="secondInsuredHealth1" ${f.secondInsuredHealth1==='No'?'checked':''}> No</label>
+          <label class="dcs-radio"><input type="radio" name="si1" value="Yes" data-field="secondInsuredHealth1" ${f.secondInsuredHealth1==='Yes'?'checked':''}> Yes</label>
+        </div>
+      </div>
+      <div class="dcs-field">
+        <label class="dcs-label">Jaundice / liver disease or treatment for over 3 months?</label>
+        <div class="dcs-radio-row">
+          <label class="dcs-radio"><input type="radio" name="si2" value="No" data-field="secondInsuredHealth2" ${f.secondInsuredHealth2==='No'?'checked':''}> No</label>
+          <label class="dcs-radio"><input type="radio" name="si2" value="Yes" data-field="secondInsuredHealth2" ${f.secondInsuredHealth2==='Yes'?'checked':''}> Yes</label>
+        </div>
+      </div>
+      <div class="dcs-field"><label class="dcs-label">Insured Person's Name <span class="req">*</span></label><input class="dcs-input" data-field="secondInsuredName" value="${esc(f.secondInsuredName||'')}"></div>
+      <div class="dcs-field">
+        <label class="dcs-label">Gender <span class="req">*</span></label>
+        <select class="dcs-select" data-field="secondInsuredGender"><option value="">Select</option><option ${f.secondInsuredGender==='Male'?'selected':''}>Male</option><option ${f.secondInsuredGender==='Female'?'selected':''}>Female</option></select>
+      </div>
+      <div class="dcs-field">
+        <label class="dcs-label">Relationship <span class="req">*</span></label>
+        <select class="dcs-select" data-field="secondInsuredRelationship"><option value="">Select</option>${DB.relationshipOptions.map(o=>`<option ${f.secondInsuredRelationship===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
+      </div>
+      <div class="dcs-field"><label class="dcs-label">Date of Birth <span class="req">*</span></label><input type="date" class="dcs-input" data-field="secondInsuredDob" value="${esc(f.secondInsuredDob||'')}"></div>
+      <div class="dcs-field">
+        <label class="dcs-label">ID Type <span class="req">*</span></label>
+        <select class="dcs-select" data-field="secondInsuredIdType"><option value="">Select</option>${ID_TYPE_OPTIONS.map(o=>`<option ${f.secondInsuredIdType===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
+      </div>
+      <div class="dcs-field"><label class="dcs-label">ID Number <span class="req">*</span></label><input class="dcs-input" data-field="secondInsuredIdNumber" value="${esc(f.secondInsuredIdNumber||'')}"></div>
+    </div>` : ''}` : ''}` : ''}
+  `;
+}
+
+/* -------------------- Preview / submit -------------------- */
+function ssGoPreview(){
+  const form = document.getElementById('ssWizardFormEl');
+  if(form) Object.assign(ui.ssForm, collectForm(form));
+  if(!ssValidateStep(3)) { dcsNavigate({mod:'ss',screen:'wizard',params:{step:3}}); return; }
+  ssAutosave();
+  dcsNavigate({ mod:'ss', screen:'preview', params:{} });
+}
+function ssRow(label, value){ return `<div class="kv"><span>${esc(label)}</span><span>${esc(value==null?'—':value)}</span></div>`; }
+function dcsSsPreview(){
+  const f = ui.ssForm;
+  const product = ssProduct(f.productName);
+  const isDps = !product || product.subType === 'DPS';
+  const computedLabel = isDps ? 'Maturity Amount' : 'Monthly Profit Amount';
+  const computedValue = isDps ? computeMaturity(f.depositAmount, Number(f.tenureYears)) : computeMonthlyProfit(f.depositAmount, Number(f.tenureYears));
+  return `
+    <div class="dcs-section-block">
+      <div class="dcs-card-row"><div class="dcs-section-hd" style="margin:-13px -14px 12px;flex:1;">পূরনকৃত তথ্য যাচাই করুন — Verify entered information</div></div>
+      <div class="erp-readonly-summary">
+        ${ssRow('Member Name', f.memberName)}
+        ${ssRow('Member No', f.memberNo)}
+        ${ssRow('Project', projectLabel(f.project))}
+        ${ssRow('Product Name', f.productName)}
+        ${ssRow('Product Sub Type', product?product.subType:'')}
+        ${ssRow('Savings Product Type', product?product.savingsProductType:'')}
+        ${ssRow('Deposit Amount', money(f.depositAmount))}
+        ${ssRow('Deposit Amount (words)', numberToWords(f.depositAmount))}
+        ${ssRow('Tenure (years)', f.tenureYears + '.0')}
+        ${ssRow(computedLabel, money(computedValue))}
+        ${ssRow('Deposit Type', f.depositType)}
+        ${ssRow('Member wants to pay?', f.memberWantsToPay)}
+      </div>
+    </div>
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">১ম নমিনি তথ্য — 1st Nominee Info</div>
+      <div class="erp-readonly-summary">
+        ${ssRow('Nominee Type', f.n1Type)}
+        ${ssRow('Name', f.n1Name)}
+        ${ssRow('Relationship', f.n1Relationship)}
+        ${ssRow('ID', (f.n1IdType||'') + ' — ' + (f.n1IdNumber||''))}
+        ${ssRow('Distribution', (f.n1Percentage||'100') + '%')}
+        ${ssRow('Phone', f.n1Phone)}
+      </div>
+    </div>
+    ${Number(f.n1Percentage||100) < 100 ? `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">২য় নমিনি তথ্য — 2nd Nominee Info</div>
+      <div class="erp-readonly-summary">
+        ${ssRow('Name', f.n2Name)} ${ssRow('Relationship', f.n2Relationship)} ${ssRow('Distribution', (f.n2Percentage||'')+'%')}
+      </div>
+    </div>` : ''}
+    ${f.guardianName ? `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">অভিভাবকের তথ্য — Guardian Info</div>
+      <div class="erp-readonly-summary">${ssRow('Name', f.guardianName)} ${ssRow('Relationship', f.guardianRelationship)} ${ssRow('Phone', f.guardianPhone)}</div>
+    </div>` : ''}
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">বিমা সংক্রান্ত তথ্য — Insurance Info</div>
+      <div class="erp-readonly-summary">
+        ${ssRow('Interested in Chaya insurance?', f.insuranceInterested)}
+        ${f.insuranceInterested==='Yes' ? ssRow('Policy Type', f.policyType) : ''}
+        ${f.insuranceInterested==='Yes' && f.health1==='No' && f.health2==='No' ? ssRow('Premium', money(f.premium)) : ''}
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="dcsNavigate({mod:'ss',screen:'wizard',params:{step:1}})">Update</button>
+      <button class="btn btn-primary" style="flex:2;background:var(--ok);border-color:var(--ok);" onclick="ssSubmit()">আবেদন করুন — Submit Application</button>
+    </div>
+  `;
+}
+function ssSubmit(){
+  const f = ui.ssForm;
+  const product = ssProduct(f.productName);
+  const isDps = !product || product.subType === 'DPS';
+  const maturityAmount = isDps ? computeMaturity(f.depositAmount, Number(f.tenureYears)) : null;
+  const monthlyProfitAmount = !isDps ? computeMonthlyProfit(f.depositAmount, Number(f.tenureYears)) : null;
+  const eligible = f.insuranceInterested==='Yes' && f.health1==='No' && f.health2==='No';
+  const rec = {
+    id: newSsId(), enrollmentId: newEnrollmentGuid(), memberNo: f.memberNo, memberName: f.memberName,
+    project: f.project, branch: f.branch, voCode: f.voCode, biometric: 'No Biometric',
+    proposedBy: FIELD_USER, requestDate: todayISO(), status: 'BM Pending',
+    bmApprover: '', bmComment: '', erpApprover: '', erpComment: '',
+    formData: {
+      productName: f.productName, productSubType: product?product.subType:'', savingsProductType: product?product.savingsProductType:'',
+      depositAmount: Number(f.depositAmount), depositAmountWords: numberToWords(f.depositAmount), tenureYears: Number(f.tenureYears),
+      maturityAmount, monthlyProfitAmount, maturityDate: null,
+      depositType: f.depositType, memberWantsToPay: f.memberWantsToPay,
+      nominee1: { type:f.n1Type, name:f.n1Name, dob:f.n1Dob, relationship:f.n1Relationship, idType:f.n1IdType, idNumber:f.n1IdNumber, percentage:f.n1Percentage, phone:f.n1Phone },
+      nominee2: Number(f.n1Percentage||100) < 100 ? { type:f.n2Type, name:f.n2Name, dob:f.n2Dob, relationship:f.n2Relationship, idType:f.n2IdType, idNumber:f.n2IdNumber, percentage:f.n2Percentage, phone:f.n2Phone } : null,
+      guardian: f.guardianName ? { name:f.guardianName, idType:f.guardianIdType, idNumber:f.guardianIdNumber, relationship:f.guardianRelationship, phone:f.guardianPhone } : null,
+      insuranceInterested: f.insuranceInterested === 'Yes', health1: f.health1, health2: f.health2,
+      policyType: eligible ? f.policyType : null, premium: eligible ? f.premium : 0,
+      secondInsured: (eligible && f.policyType==='Double') ? { name:f.secondInsuredName, gender:f.secondInsuredGender, relationship:f.secondInsuredRelationship, dob:f.secondInsuredDob, idType:f.secondInsuredIdType, idNumber:f.secondInsuredIdNumber } : null
+    }
+  };
+  if(maturityAmount){
+    const d = new Date(); d.setFullYear(d.getFullYear() + Number(f.tenureYears));
+    rec.formData.maturityDate = d.toISOString().slice(0,10);
+  }
+  DB.specialSavingsApplications.unshift(rec);
+  persist();
+  clearDraft(ssDraftKeysForMember(f.memberNo));
+  ui.ssForm = null;
+  showConfirm('Server Message', 'Special Savings application submitted successfully. Awaiting for BM approval.', ()=>{
+    dcsOpenModule('ss');
+  }, { hideNo:true, yesLabel:'OKAY' });
+}
+
+/* -------------------- Detail / BM decision -------------------- */
+function ssDetailRows(r){
+  const fd = r.formData;
+  const computedLabel = fd.productSubType==='DPS' ? 'Amount due on maturity' : 'Monthly Profit Amount';
+  const computedValue = fd.productSubType==='DPS' ? fd.maturityAmount : fd.monthlyProfitAmount;
+  return `
+    <div class="erp-readonly-summary">
+      ${ssRow('Member Name', r.memberName)} ${ssRow('Member ID', r.memberNo)} ${ssRow('VO Code', r.voCode)}
+      ${ssRow('Product Name', fd.productName)} ${ssRow('Product Sub Type', fd.productSubType)} ${ssRow('Savings Product Type', fd.savingsProductType)}
+      ${ssRow('Deposit Amount', money(fd.depositAmount))} ${ssRow('Deposit Amount (words)', fd.depositAmountWords)}
+      ${ssRow('Duration (Year)', fd.tenureYears)} ${ssRow(computedLabel, money(computedValue))}
+      ${fd.maturityDate ? ssRow('Maturity Date', fmtDate(fd.maturityDate)) : ''}
+    </div>
+    <div class="dcs-section-hd" style="margin:14px -14px 10px;">Transaction information</div>
+    <div class="erp-readonly-summary">${ssRow('Deposit type', fd.depositType)} ${ssRow('Want to pay as a member?', fd.memberWantsToPay)}</div>
+    <div class="dcs-section-hd" style="margin:14px -14px 10px;">First Nominee Info</div>
+    <div class="erp-readonly-summary">
+      ${ssRow('Nominee Type', fd.nominee1.type)} ${ssRow('Nominee Name', fd.nominee1.name)} ${ssRow('Relationship', fd.nominee1.relationship)}
+      ${ssRow('ID', fd.nominee1.idType + ' — ' + fd.nominee1.idNumber)} ${ssRow('Distribution', fd.nominee1.percentage+'%')}
+    </div>
+    ${fd.nominee2 ? `<div class="dcs-section-hd" style="margin:14px -14px 10px;">Second Nominee Info</div>
+    <div class="erp-readonly-summary">${ssRow('Name', fd.nominee2.name)} ${ssRow('Relationship', fd.nominee2.relationship)} ${ssRow('Distribution', fd.nominee2.percentage+'%')}</div>` : ''}
+    ${fd.guardian ? `<div class="dcs-section-hd" style="margin:14px -14px 10px;">Guardian Info (nominee under 18)</div>
+    <div class="erp-readonly-summary">${ssRow('Name', fd.guardian.name)} ${ssRow('Relationship', fd.guardian.relationship)} ${ssRow('Phone', fd.guardian.phone)}</div>` : ''}
+    <div class="dcs-section-hd" style="margin:14px -14px 10px;">Insurance Premium Information</div>
+    <div class="erp-readonly-summary">
+      ${ssRow('Interested in Chaya insurance?', fd.insuranceInterested ? 'Yes' : 'No')}
+      ${fd.policyType ? ssRow('Insurance Product', 'Chaya - Savings Shield Insurance') : ''}
+      ${fd.policyType ? ssRow('Policy Type', fd.policyType) : ''}
+      ${fd.premium ? ssRow('Premium amount', money(fd.premium)) : ''}
+    </div>
+    ${fd.secondInsured ? `<div class="dcs-section-hd" style="margin:14px -14px 10px;">Second Insurer Information</div>
+    <div class="erp-readonly-summary">${ssRow('Name', fd.secondInsured.name)} ${ssRow('Relationship', fd.secondInsured.relationship)}</div>` : ''}
+  `;
+}
+function dcsSsDetail(params){
+  const r = DB.specialSavingsApplications.find(x=>x.id===params.id);
+  if(!r) return '<div class="dcs-empty">Application not found.</div>';
+  const actionable = ui.dcsRole === 'approver' && r.status === 'BM Pending';
+  return `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">Application Details</div>
+      <div class="dcs-card-row" style="margin-bottom:8px;"><div class="dcs-card-name">${esc(r.memberName)}</div><span class="chip ${statusChipClass(r.status)}">${esc(r.status)}</span></div>
+      ${ssDetailRows(r)}
+    </div>
+    ${actionable ? `
+    <div class="dcs-section-block">
+      <div class="dcs-section-hd">Decision</div>
+      <textarea class="dcs-textarea" id="ssDecisionComment" placeholder="কিছু লিখুন.. (required for Send Back / Reject)"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-danger" style="flex:1;" onclick="ssDecide('${r.id}','BM Rejected')">Reject</button>
+        <button class="btn btn-ghost" style="flex:1;" onclick="ssDecide('${r.id}','BM Sendback')">Send Back</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="ssDecide('${r.id}','ERP Pending')">Approve</button>
+      </div>
+    </div>` : ''}
+  `;
+}
+function ssDecide(id, newStatus){
+  const comment = (document.getElementById('ssDecisionComment')||{}).value || '';
+  if(newStatus !== 'ERP Pending' && !comment.trim()){ toast('A comment is required for Send Back or Reject.'); return; }
+  const verbs = { 'ERP Pending':'Approve', 'BM Sendback':'Send back', 'BM Rejected':'Reject' };
+  showConfirm(verbs[newStatus] + ' application', `${verbs[newStatus]} this Special Savings application?`, ()=>{
+    const r = DB.specialSavingsApplications.find(x=>x.id===id);
+    r.status = newStatus;
+    r.bmApprover = APPROVER_USER;
+    r.bmComment = comment;
+    persist();
+    toast(newStatus==='ERP Pending' ? 'Approved. Sent to the ERP Special Savings Buffer.' : 'Decision recorded: ' + newStatus);
+    dcsOpenModule('ss');
+  }, { yesClass: newStatus==='BM Rejected'?'btn-danger':'btn-primary', yesLabel: verbs[newStatus] });
+}
+
+/* ==========================================================================
    PART B — ERP WEB
    ========================================================================== */
 function setErpMenu(m){
   ui.erpMenu = m;
-  if(m !== 'savings') { toast('This menu item is not part of the AHSS prototype.'); ui.erpMenu = 'savings'; return; }
+  if(m !== 'savings') { toast('This menu item is not part of the AHSS/Special Savings prototype.'); ui.erpMenu = 'savings'; return; }
   render();
 }
 function setErpTab(t){ ui.erpTab = t; ui.erpReview = null; render(); }
 function setErpB1Tab(t){ ui.erpB1Tab = t; render(); }
+function setErpSavingsBranch(b){ ui.erpSavingsBranch = b; ui.erpTab = (b==='special') ? 'ssBuffer' : 'b2'; render(); }
 
 const ERP_MODULES = ['Settings','HRM','EDMS','ePMS','Procurement','eTender','Fixed Asset','Microfinance','Accounting','Budget'];
 const ERP_MENU = ['Programme Admin','VO','Member','Loan','Savings','Insurance','Report'];
+const SS_ERP_STUB_ITEMS = ['Special Savings Account Setup','Special Savings Account List','Special Savings Refund','Monthly Profit Withdrawal','Special Savings Collection','Special Savings Collection Modification','Special Savings Correction'];
 
 function renderERP(){
   const root = document.getElementById('erpRoot');
@@ -1167,7 +1957,7 @@ function renderERP(){
       <div class="erp-topbar">
         ${ERP_MODULES.map(m=>`<div class="mod ${m==='Microfinance'?'active':''}">${esc(m)}</div>`).join('')}
         <div class="spacer"></div>
-        <div class="welcome">Welcome Abdullah Al Noman (abdullah.noman-SA- Gulshan)</div>
+        <div class="welcome">Welcome ${esc(ERP_USER)} (00255389-BA)</div>
       </div>
       <div class="erp-datebar">Accounting Date : ${todayDisplay()} [DAY OPEN]</div>
       <div class="erp-header">
@@ -1177,11 +1967,21 @@ function renderERP(){
         ${ERP_MENU.map(m=>`<button class="${m==='Savings'&&ui.erpMenu==='savings'?'active':''}" onclick="setErpMenu('${m==='Savings'?'savings':'other'}')">${esc(m)}</button>`).join('')}
       </div>
       ${ui.erpMenu==='savings' ? `
-      <div class="erp-menubar" style="background:#fff;border-bottom:1px solid var(--erp-border);">
+      <div class="erp-menubar" style="background:#fff;border-bottom:1px solid var(--erp-border);flex-wrap:wrap;">
+        <button onclick="notImplemented('Compulsory Savings')">Compulsory Savings</button>
+        <button class="${ui.erpSavingsBranch==='special'?'active':''}" onclick="setErpSavingsBranch('special')">Special Savings ▸</button>
+        <button class="${ui.erpSavingsBranch==='ahss'?'active':''}" onclick="setErpSavingsBranch('ahss')">Amar Hishab Savings ▸</button>
+      </div>
+      ${ui.erpSavingsBranch==='special' ? `
+      <div class="erp-menubar" style="background:#f4f8fb;border-bottom:1px solid var(--erp-border);flex-wrap:wrap;">
+        ${SS_ERP_STUB_ITEMS.map(i=>`<button onclick='notImplemented(${JSON.stringify(i)})'>${esc(i)}</button>`).join('')}
+        <button class="${ui.erpTab==='ssBuffer'||ui.erpTab==='ssDetail'?'active':''}" onclick="setErpTab('ssBuffer')">Special Savings Buffer</button>
+      </div>` : `
+      <div class="erp-menubar" style="background:#f4f8fb;border-bottom:1px solid var(--erp-border);">
         <button class="${ui.erpTab==='b2'?'active':''}" onclick="setErpTab('b2')">AHSS Account Opening</button>
         <button class="${ui.erpTab==='b1'||ui.erpTab==='b1detail'?'active':''}" onclick="setErpTab('b1')">Consent Buffer Panel</button>
         <button class="${ui.erpTab==='b3'?'active':''}" onclick="setErpTab('b3')">AHSS Account View</button>
-      </div>` : ''}
+      </div>`}` : ''}
       <div class="erp-layout">
         <div class="erp-sidebar">${erpSidebar()}</div>
         <div class="erp-main">${erpMainContent()}</div>
@@ -1209,6 +2009,8 @@ function erpMainContent(){
   if(ui.erpTab === 'b1') return erpB1Panel();
   if(ui.erpTab === 'b1detail') return erpB1Detail();
   if(ui.erpTab === 'b3') return erpB3View();
+  if(ui.erpTab === 'ssBuffer') return erpSsBuffer();
+  if(ui.erpTab === 'ssDetail') return erpSsDetail();
   return erpB2Form();
 }
 
@@ -1402,8 +2204,8 @@ function wireErpB2Form(){
   const jointDob = document.getElementById('erpJointDob');
   if(jointDob){
     jointDob.addEventListener('change', ()=>{
-      const age = Math.max(0, Math.floor((Date.now() - new Date(jointDob.value)) / 31557600000));
-      document.getElementById('erpJointAge').value = jointDob.value ? age : '';
+      const age = ageFromDob(jointDob.value);
+      document.getElementById('erpJointAge').value = age===null ? '' : age;
     });
   }
   const useExisting = document.getElementById('erpUseExistingNominee');
@@ -1445,7 +2247,7 @@ function erpSaveB2(){
     DB.ahssRequests.unshift({
       id: newReqId(), memberNo: fd.memberNo, memberName: fd.memberName, project: projectCode, branch: account.branch,
       requestType:'AHSS Account Opening', proposedBy: ERP_USER, dcsApprovedBy:'', requestDate: todayISO(),
-      status:'Approved', linkedAccountNo: accountNo,
+      status:'ERP Approved', linkedAccountNo: accountNo,
       formData: { projectLabel: fd.projectLabel, memberNo: fd.memberNo, erpMemberNo: fd.erpMemberNo, memberName: fd.memberName,
         memberCategory: fd.memberCategory, mobile: fd.mobile, accountType: erpB2State.accountType, otpSendsTo:'Self',
         nominee: account.nominee, accountName: fd.accountName, savingsProduct: fd.savingsProduct, consent: true }
@@ -1462,8 +2264,8 @@ function erpClearB2(){
   }, { yesClass:'btn-danger', yesLabel:'Clear' });
 }
 
-/* -------------------- B1: Consent Buffer Panel -------------------- */
-function erpFilterMatches(row, isContinuation){
+/* -------------------- B1: Consent Buffer Panel (AHSS) -------------------- */
+function erpFilterMatches(row){
   const f = ui.erpFilters;
   if(f.project && row.project !== f.project) return false;
   if(f.branch && !(row.branch||'').toLowerCase().includes(f.branch.toLowerCase())) return false;
@@ -1483,9 +2285,9 @@ function erpApplyFilters(){
   render();
 }
 function erpResetFilters(){ ui.erpFilters = { project:'', branch:'', from:'', to:'', status:'' }; render(); }
+const ERP_REACHED_STATUSES = ['ERP Pending','ERP Sendback','ERP Rejected','ERP Approved'];
 
 function erpB1Panel(){
-  const ALL_STATUSES = ['Pending ERP Approval','Approved','Rejected','Sent Back to DCS'];
   const f = ui.erpFilters;
   return `
     <h1 class="erp-page-title">Consent Buffer Panel</h1>
@@ -1494,11 +2296,11 @@ function erpB1Panel(){
       <button class="${ui.erpB1Tab==='continuation'?'active':''}" onclick="setErpB1Tab('continuation')">Auto Debit/Credit Continuation/Discontinuation</button>
     </div>
     <div class="erp-filterbar">
-      <div class="fitem"><label>Project</label><select id="fProject"><option value="">All</option>${DB.projects.map(p=>`<option value="${esc(p.code)}" ${f.project===p.code?'selected':''}>${esc(p.code)}</option>`).filter((v,i,a)=>a.indexOf(v)===i).join('')}</select></div>
+      <div class="fitem"><label>Project</label><select id="fProject"><option value="">All</option>${[...new Set(DB.projects.map(p=>p.code))].map(c=>`<option value="${esc(c)}" ${f.project===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
       <div class="fitem"><label>Branch</label><input id="fBranch" value="${esc(f.branch)}" placeholder="Branch name"></div>
       <div class="fitem"><label>From</label><input type="date" id="fFrom" value="${esc(f.from)}"></div>
       <div class="fitem"><label>To</label><input type="date" id="fTo" value="${esc(f.to)}"></div>
-      <div class="fitem"><label>Status</label><select id="fStatus"><option value="">All</option>${ALL_STATUSES.map(s=>`<option ${f.status===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+      <div class="fitem"><label>Status</label><select id="fStatus"><option value="">All</option>${ERP_REACHED_STATUSES.map(s=>`<option ${f.status===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
       <div class="fitem" style="min-width:auto;"><button class="erp-btn" onclick="erpApplyFilters()">Apply</button></div>
       <div class="fitem" style="min-width:auto;"><button class="erp-btn" onclick="erpResetFilters()">Reset</button></div>
     </div>
@@ -1506,7 +2308,7 @@ function erpB1Panel(){
   `;
 }
 function erpB1OpeningTable(){
-  const rows = DB.ahssRequests.filter(r=> r.status!=='Pending DCS Approval' && erpFilterMatches(r,false))
+  const rows = DB.ahssRequests.filter(r=> ERP_REACHED_STATUSES.includes(r.status) && erpFilterMatches(r))
     .sort((a,b)=> b.requestDate.localeCompare(a.requestDate));
   const headers = ['Member No.','Member Name','Project','Branch','Request Type','Proposed By','DCS Approved By','Request Date','Status'];
   setRowsCache('AHSS Account Opening', rows.map(r=>[r.memberNo,r.memberName,projectLabel(r.project),r.branch,r.requestType,r.proposedBy,r.dcsApprovedBy||'—',fmtDate(r.requestDate),r.status]));
@@ -1526,7 +2328,7 @@ function erpB1OpeningTable(){
   `;
 }
 function erpB1ContinuationTable(){
-  const rows = DB.continuationRequests.filter(r=> r.status!=='Pending DCS Approval' && erpFilterMatches(r,true))
+  const rows = DB.continuationRequests.filter(r=> ERP_REACHED_STATUSES.includes(r.status) && erpFilterMatches(r))
     .sort((a,b)=> b.requestDate.localeCompare(a.requestDate));
   const headers = ['Member No.','Member Name','Project','Branch','Product','Action','Proposed By','DCS Approved By','Request Date','Status'];
   setRowsCache('Auto Debit-Credit Continuation', rows.map(r=>[r.memberNo,r.memberName,projectLabel(r.project),r.branch,r.product,r.action,r.proposedBy,r.dcsApprovedBy||'—',fmtDate(r.requestDate),r.status]));
@@ -1553,7 +2355,7 @@ function erpB1Detail(){
   const isOpening = rv.type === 'opening';
   const r = isOpening ? DB.ahssRequests.find(x=>x.id===rv.id) : DB.continuationRequests.find(x=>x.id===rv.id);
   if(!r) return '<div class="dcs-empty">Request not found.</div>';
-  const actionable = r.status === 'Pending ERP Approval';
+  const actionable = r.status === 'ERP Pending';
   return `
     <button class="erp-link-btn" style="margin-bottom:10px;" onclick="setErpTab('b1')">← Back to Consent Buffer Panel</button>
     <h1 class="erp-page-title">Review ${esc(r.id)} <span class="chip ${statusChipClass(r.status)}" style="margin-left:10px;">${esc(r.status)}</span></h1>
@@ -1591,9 +2393,9 @@ function erpB1Detail(){
       <div class="erp-section-body">
         <div class="erp-field"><label>Reviewer Comment</label><textarea id="erpDecisionComment" rows="3" placeholder="Required for Send Back or Reject"></textarea></div>
         <div class="erp-btn-row">
-          <button class="erp-btn" style="background:#DCEEE2;border-color:#9ecdac;" onclick="erpDecide('${rv.type}','${rv.id}','Approved')">Approve</button>
-          <button class="erp-btn" style="background:#EDE3F8;border-color:#c9adf0;" onclick="erpDecide('${rv.type}','${rv.id}','Sent Back to DCS')">Send Back</button>
-          <button class="erp-btn" style="background:#F8DAD2;border-color:#e2a894;" onclick="erpDecide('${rv.type}','${rv.id}','Rejected')">Reject</button>
+          <button class="erp-btn" style="background:#DCEEE2;border-color:#9ecdac;" onclick="erpDecide('${rv.type}','${rv.id}','ERP Approved')">Approve</button>
+          <button class="erp-btn" style="background:#EDE3F8;border-color:#c9adf0;" onclick="erpDecide('${rv.type}','${rv.id}','ERP Sendback')">Send Back</button>
+          <button class="erp-btn" style="background:#F8DAD2;border-color:#e2a894;" onclick="erpDecide('${rv.type}','${rv.id}','ERP Rejected')">Reject</button>
         </div>
       </div>
     </div>` : ''}
@@ -1625,12 +2427,12 @@ function erpGenerateConsentPaper(type, id){
 }
 function erpDecide(type, id, status){
   const comment = (document.getElementById('erpDecisionComment')||{}).value || '';
-  if(status !== 'Approved' && !comment.trim()){ toast('A reviewer comment is required for Send Back or Reject.'); return; }
+  if(status !== 'ERP Approved' && !comment.trim()){ toast('A reviewer comment is required for Send Back or Reject.'); return; }
   showConfirm(status + ' request', `Confirm: ${status} this request?`, ()=>{
     if(type === 'opening'){
       const r = DB.ahssRequests.find(x=>x.id===id);
       r.status = status;
-      if(status === 'Approved'){
+      if(status === 'ERP Approved'){
         const accountNo = newAcctNo();
         DB.accounts.push({
           accountNo, memberNo: r.memberNo, accountName: r.formData.accountName, project: r.project, branch: r.branch,
@@ -1643,7 +2445,7 @@ function erpDecide(type, id, status){
     } else {
       const r = DB.continuationRequests.find(x=>x.id===id);
       r.status = status;
-      if(status === 'Approved'){
+      if(status === 'ERP Approved'){
         const acct = DB.accounts.find(a=>a.accountNo===r.accountNo);
         const key = Object.keys(AUTODC_PRODUCTS).find(k=>AUTODC_PRODUCTS[k]===r.product);
         if(acct && key){
@@ -1657,7 +2459,7 @@ function erpDecide(type, id, status){
     toast('Decision recorded: ' + status);
     ui.erpReview = null;
     setErpTab('b1');
-  }, { yesClass: status==='Approved'?'btn-primary':(status==='Rejected'?'btn-danger':'btn-outline') });
+  }, { yesClass: status==='ERP Approved'?'btn-primary':(status==='ERP Rejected'?'btn-danger':'btn-outline') });
 }
 
 /* -------------------- B3: AHSS Account view (ERP) -------------------- */
@@ -1704,10 +2506,131 @@ function erpB3View(){
   `;
 }
 
+/* -------------------- Special Savings Buffer (ERP, BAO) -------------------- */
+function ssErpApplyFilters(){
+  ui.ssErpFilters = {
+    project: document.getElementById('ssfProject').value,
+    vo: document.getElementById('ssfVo').value,
+    from: document.getElementById('ssfFrom').value,
+    to: document.getElementById('ssfTo').value,
+    status: document.getElementById('ssfStatus').value,
+  };
+  render();
+}
+function ssErpResetFilters(){ ui.ssErpFilters = { project:'', vo:'', from:'', to:'', status:'' }; render(); }
+function erpSsBuffer(){
+  const f = ui.ssErpFilters;
+  const rows = DB.specialSavingsApplications.filter(r=>{
+    if(!ERP_REACHED_STATUSES.includes(r.status)) return false;
+    if(f.project && r.project !== f.project) return false;
+    if(f.vo && String(r.voCode) !== f.vo) return false;
+    if(f.from && r.requestDate < f.from) return false;
+    if(f.to && r.requestDate > f.to) return false;
+    if(f.status && r.status !== f.status) return false;
+    return true;
+  }).sort((a,b)=> b.requestDate.localeCompare(a.requestDate));
+  const headers = ['Buffer Id','Member Name','Member ID','Savings Product','Vo Code','Member Number','Installment Amount','Approver','Creation Date','Status'];
+  setRowsCache('Special Savings Buffer', rows.map(r=>[r.id,r.memberName,r.memberNo,r.formData.productName,r.voCode,r.memberNo,money(r.formData.depositAmount),'BM',fmtDate(r.requestDate),r.status]));
+  return `
+    <h1 class="erp-page-title">Special Savings Buffer</h1>
+    <div class="erp-filterbar">
+      <div class="fitem"><label>Project</label><select id="ssfProject"><option value="">All</option>${[...new Set(DB.projects.map(p=>p.code))].map(c=>`<option value="${esc(c)}" ${f.project===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
+      <div class="fitem"><label>VO</label><input id="ssfVo" value="${esc(f.vo)}" placeholder="VO code"></div>
+      <div class="fitem"><label>From</label><input type="date" id="ssfFrom" value="${esc(f.from)}"></div>
+      <div class="fitem"><label>To</label><input type="date" id="ssfTo" value="${esc(f.to)}"></div>
+      <div class="fitem"><label>Status</label><select id="ssfStatus"><option value="">All</option>${ERP_REACHED_STATUSES.map(s=>`<option ${f.status===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+      <div class="fitem" style="min-width:auto;"><button class="erp-btn" onclick="ssErpApplyFilters()">Search</button></div>
+      <div class="fitem" style="min-width:auto;"><button class="erp-btn" onclick="ssErpResetFilters()">Reset</button></div>
+    </div>
+    ${downloadRow('Special Savings Buffer', headers, [])}
+    <div class="erp-table-wrap"><table class="erp-table">
+      <thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}<th>Action</th>${rows.some(r=>r.status==='ERP Approved')?'<th>Download</th>':''}</tr></thead>
+      <tbody>${rows.map(r=>`
+        <tr>
+          <td>${esc(r.id)}</td><td>${esc(r.memberName)}</td><td>${esc(r.memberNo)}</td><td>${esc(r.formData.productName)}</td>
+          <td>${esc(r.voCode)}</td><td>${esc(r.memberNo)}</td><td>${money(r.formData.depositAmount)}</td><td>BM</td>
+          <td>${esc(fmtDate(r.requestDate))}</td>
+          <td><span class="chip ${statusChipClass(r.status)}">${esc(r.status)}</span></td>
+          <td><button class="erp-btn" style="padding:5px 12px;" onclick="erpOpenSsReview('${r.id}')">View</button></td>
+          ${r.status==='ERP Approved' ? `<td><button class="erp-btn" style="padding:5px 12px;" onclick="erpGenerateSsConsentPaper('${r.id}')">Download</button></td>` : (rows.some(x=>x.status==='ERP Approved')?'<td></td>':'')}
+        </tr>`).join('') || `<tr><td colspan="11" style="text-align:center;color:#8a97a1;padding:20px;">No applications match the current filters.</td></tr>`}
+      </tbody>
+    </table></div>
+  `;
+}
+function erpOpenSsReview(id){ ui.erpReview = { type:'special', id }; ui.erpTab = 'ssDetail'; render(); }
+function erpSsDetail(){
+  const rv = ui.erpReview;
+  const r = rv && DB.specialSavingsApplications.find(x=>x.id===rv.id);
+  if(!r) return '<div class="dcs-empty">Application not found.</div>';
+  const actionable = r.status === 'ERP Pending';
+  const fd = r.formData;
+  return `
+    <button class="erp-link-btn" style="margin-bottom:10px;" onclick="setErpTab('ssBuffer')">← Back to Special Savings Buffer</button>
+    <h1 class="erp-page-title">Application ${esc(r.id)} <span class="chip ${statusChipClass(r.status)}" style="margin-left:10px;">${esc(r.status)}</span></h1>
+    <div class="erp-section">
+      <div class="erp-section-hd">Application Details</div>
+      <div class="erp-section-body">${ssDetailRows(r)}</div>
+    </div>
+    ${actionable ? `
+    <div class="erp-section">
+      <div class="erp-section-hd">Decision</div>
+      <div class="erp-section-body">
+        <div class="erp-grid cols-2">
+          <div class="erp-field"><label>Member Wants to Pay?</label>
+            <div style="padding-top:6px;"><label><input type="radio" name="ssWantsPay" checked> ${esc(fd.memberWantsToPay)}</label></div>
+          </div>
+          <div class="erp-field"><label>Deposit Amount</label><input readonly value="${money(fd.depositAmount)}"></div>
+        </div>
+        <div class="erp-field"><label>Rejection/Sendback Reason</label><textarea id="ssErpComment" rows="3" placeholder="Required for Send Back or Reject"></textarea></div>
+        <div class="erp-btn-row">
+          <button class="erp-btn" style="background:#F8DAD2;border-color:#e2a894;" onclick="erpSsDecide('${r.id}','ERP Rejected')">Reject</button>
+          <button class="erp-btn" style="background:#EDE3F8;border-color:#c9adf0;" onclick="erpSsDecide('${r.id}','ERP Sendback')">Sendback</button>
+          <button class="erp-btn" style="background:#DCEEE2;border-color:#9ecdac;" onclick="erpSsDecide('${r.id}','ERP Approved')">Approve</button>
+        </div>
+      </div>
+    </div>` : ''}
+  `;
+}
+function erpSsDecide(id, status){
+  const comment = (document.getElementById('ssErpComment')||{}).value || '';
+  if(status !== 'ERP Approved' && !comment.trim()){ toast('A reason is required for Sendback or Reject.'); return; }
+  showConfirm(status + ' application', `Confirm: ${status} this Special Savings application?`, ()=>{
+    const r = DB.specialSavingsApplications.find(x=>x.id===id);
+    r.status = status;
+    r.erpApprover = ERP_USER;
+    r.erpComment = comment;
+    persist();
+    toast('Decision recorded: ' + status);
+    ui.erpReview = null;
+    setErpTab('ssBuffer');
+  }, { yesClass: status==='ERP Approved'?'btn-primary':(status==='ERP Rejected'?'btn-danger':'btn-outline') });
+}
+function erpGenerateSsConsentPaper(id){
+  const r = DB.specialSavingsApplications.find(x=>x.id===id);
+  const w = window.open('', '_blank', 'width=800,height=900');
+  if(!w){ toast('Pop-up blocked — allow pop-ups to view the consent paper.'); return; }
+  const fd = r.formData;
+  w.document.write(`<!DOCTYPE html><html><head><title>Consent Paper</title><style>
+    body{font-family:'Times New Roman',serif;padding:50px;color:#111;} h2{text-align:center;color:#173357;}
+    .meta{margin:24px 0;font-size:14px;line-height:1.9;} .sign{margin-top:70px;display:flex;justify-content:space-between;}
+    .sign div{border-top:1px solid #333;width:220px;text-align:center;padding-top:6px;font-size:12.5px;}
+  </style></head><body>
+  <h2>BRAC Microfinance — Special Savings Consent Paper</h2>
+  <div class="meta">
+    <p>This is to certify that <b>${esc(r.memberName)}</b> (Member No. ${esc(r.memberNo)}) has given informed consent to open a
+    <b>${esc(fd.productName)}</b> Special Savings account with a deposit of ${money(fd.depositAmount)} over ${esc(fd.tenureYears)} years${fd.insuranceInterested ? `, together with the Chaya - Savings Shield Insurance (${esc(fd.policyType)}, premium ${money(fd.premium)})` : ', without Chaya insurance'}.</p>
+    <p>Date: ${esc(todayDisplay())}</p>
+  </div>
+  <div class="sign"><div>Client Signature</div><div>Authorized Officer</div></div>
+  <script>window.onload=function(){window.print();};<\/script>
+  </body></html>`);
+  w.document.close();
+}
+
 /* ---------------- final render hook: wire ERP forms after paint ---------------- */
 const _origRenderERP = renderERP;
 renderERP = function(){
   _origRenderERP();
   if(ui.erpTab === 'b2') wireErpB2Form();
 };
-

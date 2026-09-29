@@ -86,6 +86,32 @@ a{color:var(--steel);}
 .dcs-role-opt{flex:1;text-align:center;padding:7px 4px;border-radius:18px;font-size:11.5px;font-weight:700;color:#fff;opacity:.75;}
 .dcs-role-opt.active{background:#fff;color:var(--brac-pink-dark);opacity:1;}
 
+/* -------- Real-app-style top bar + dashboard grid (DCS Home shell) -------- */
+.dcs-appbar{display:flex;align-items:center;gap:6px;background:#fff;border-bottom:1px solid #eee;padding:10px 12px;}
+.dcs-appbar-icon{width:32px;height:32px;border-radius:8px;background:#fdf1f6;border:none;color:var(--brac-pink-dark);font-size:16px;display:flex;align-items:center;justify-content:center;}
+.dcs-appbar-title{flex:1;font-size:15px;font-weight:800;color:var(--navy);}
+.dcs-appbar-lang{background:var(--brac-pink);color:#fff;font-size:10.5px;font-weight:800;border-radius:10px;padding:3px 8px;}
+.dcs-role-strip{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#faf9fb;border-bottom:1px solid #eee;font-size:11px;color:var(--muted);}
+.dcs-role-strip .dcs-role-switch{background:#eee;flex:1;}
+.dcs-role-strip .dcs-role-opt{color:var(--navy);opacity:.6;}
+.dcs-role-strip .dcs-role-opt.active{background:var(--brac-pink);color:#fff;opacity:1;}
+
+.dcs-home-header{text-align:center;font-size:12.5px;font-weight:700;color:var(--navy);padding:14px 10px 4px;}
+.dcs-dashboard-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px 4px;}
+.dcs-tile{position:relative;background:#fff;border:1px solid #f0eaea;border-radius:14px;box-shadow:var(--card-shadow);padding:14px 4px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;}
+.dcs-tile-icon{font-size:22px;width:46px;height:46px;border-radius:50%;background:#fbe9f1;color:var(--brac-pink-dark);display:flex;align-items:center;justify-content:center;}
+.dcs-tile-label{font-size:10.5px;font-weight:700;color:var(--navy);text-align:center;line-height:1.25;}
+.dcs-tile-new .dcs-tile-icon{background:var(--steel);color:#fff;}
+.dcs-tile-badge{position:absolute;top:4px;right:6px;background:var(--ok);color:#fff;font-size:8.5px;font-weight:800;border-radius:6px;padding:1px 5px;}
+.dcs-menu-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+
+/* -------- Special Savings wizard stepper -------- */
+.dcs-stepper{display:flex;background:linear-gradient(90deg,var(--brac-pink),var(--brac-pink-dark));border-radius:12px;padding:8px 4px;margin-bottom:14px;}
+.dcs-step{flex:1;text-align:center;color:rgba(255,255,255,.65);font-size:9.5px;font-weight:700;}
+.dcs-step.active{color:#fff;}
+.dcs-step.done{color:rgba(255,255,255,.9);}
+.dcs-step-ic{display:block;font-size:15px;margin-bottom:2px;}
+
 .dcs-body{min-height:560px;max-height:72vh;overflow-y:auto;background:#F7F8FA;padding:14px 14px 20px;}
 .dcs-section-title{font-size:15px;font-weight:800;color:var(--navy);margin:4px 0 10px;}
 .dcs-subtle{font-size:12px;color:var(--muted);margin:-4px 0 12px;}

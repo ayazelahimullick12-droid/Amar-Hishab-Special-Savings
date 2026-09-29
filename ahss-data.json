@@ -20,6 +20,10 @@
   },
   "relationshipOptions": ["Spouse", "Son", "Daughter", "Father", "Mother", "Brother", "Sister", "Other"],
   "savingsProducts": ["General Savings", "Special Savings"],
+  "specialSavingsProducts": [
+    { "name": "Long Term Monthly Deposit", "subType": "DPS", "savingsProductType": "Voluntary and Current Savings", "tenureYears": [3, 5, 8, 10], "depositAmounts": [100, 200, 500, 1000, 2000, 5000, 10000] },
+    { "name": "Monthly Profit Deposit", "subType": "Term Deposit", "savingsProductType": "Term Savings", "tenureYears": [3, 5, 8, 10], "depositAmounts": [10000, 20000, 50000, 100000] }
+  ],
   "reasonOptions": [
     "Confirmed with client via phone",
     "Confirmed with client via branch visit",
@@ -118,7 +122,7 @@
       "proposedBy": "CDO - Jasim Uddin",
       "dcsApprovedBy": "",
       "requestDate": "2026-09-20",
-      "status": "Pending DCS Approval",
+      "status": "BM Pending",
       "formData": {
         "projectLabel": "DABI (15)",
         "memberNo": "MEM-100788",
@@ -144,7 +148,7 @@
       "proposedBy": "CO - Habibur Rahman",
       "dcsApprovedBy": "Branch Manager - Farida Yasmin",
       "requestDate": "2026-09-18",
-      "status": "Pending ERP Approval",
+      "status": "ERP Pending",
       "formData": {
         "projectLabel": "BCUP (279)",
         "memberNo": "MEM-101020",
@@ -170,7 +174,7 @@
       "proposedBy": "CDO - Jasim Uddin",
       "dcsApprovedBy": "ABM - Kamal Hossain",
       "requestDate": "2026-09-25",
-      "status": "Approved",
+      "status": "ERP Approved",
       "linkedAccountNo": "AHSS-000201",
       "formData": {
         "projectLabel": "DABI (15)",
@@ -201,7 +205,7 @@
       "reason": "Client requested cash collection due to a mobile banking issue on her account.",
       "proposedBy": "CDO - Jasim Uddin",
       "requestDate": "2026-09-22",
-      "status": "Pending DCS Approval",
+      "status": "BM Pending",
       "dcsApprovedBy": "",
       "verification": "",
       "comment": ""
@@ -218,10 +222,87 @@
       "reason": "Renewal confirmation after DPS tenure review.",
       "proposedBy": "CO - Habibur Rahman",
       "requestDate": "2026-09-15",
-      "status": "Pending ERP Approval",
+      "status": "ERP Pending",
       "dcsApprovedBy": "AM - Nasrin Sultana",
       "verification": "Both",
       "comment": "Confirmed with client via phone and branch visit. Client wants the DPS auto debit to continue as before."
+    }
+  ],
+  "specialSavingsApplications": [
+    {
+      "id": "SS-4001",
+      "enrollmentId": "a51f21c1-a3f4-4c39-b5d4-aebfd4ae6daa",
+      "memberNo": "MEM-101020",
+      "memberName": "Rina Islam",
+      "project": "BCUP",
+      "branch": "Cumilla Sadar",
+      "voCode": 2143,
+      "biometric": "No Biometric",
+      "proposedBy": "CDO - Jasim Uddin",
+      "requestDate": "2026-09-24",
+      "status": "BM Pending",
+      "bmApprover": "", "bmComment": "", "erpApprover": "", "erpComment": "",
+      "formData": {
+        "productName": "Long Term Monthly Deposit", "productSubType": "DPS", "savingsProductType": "Voluntary and Current Savings",
+        "depositAmount": 500, "depositAmountWords": "Five Hundred", "tenureYears": 5,
+        "maturityAmount": 34500, "monthlyProfitAmount": null, "maturityDate": "2031-09-24",
+        "depositType": "Cash", "memberWantsToPay": "Yes",
+        "nominee1": { "type": "New", "name": "Nurul Amin", "dob": "1955-02-19", "relationship": "Father", "idType": "National ID", "idNumber": "1955223344556", "percentage": "100", "phone": "01644556677" },
+        "nominee2": null, "guardian": null,
+        "insuranceInterested": true, "health1": "No", "health2": "No",
+        "policyType": "Single", "premium": 710, "secondInsured": null
+      }
+    },
+    {
+      "id": "SS-4002",
+      "enrollmentId": "3eea7a2c-f727-47c2-861d-483efb9af296",
+      "memberNo": "MEM-101250",
+      "memberName": "Ayesha Siddika",
+      "project": "DABI",
+      "branch": "Mirpur-2",
+      "voCode": 2090,
+      "biometric": "Pending",
+      "proposedBy": "CDO - Jasim Uddin",
+      "requestDate": "2026-09-19",
+      "status": "ERP Pending",
+      "bmApprover": "BM/ABM - Kamal Hossain", "bmComment": "Verified with client, documents in order.",
+      "erpApprover": "", "erpComment": "",
+      "formData": {
+        "productName": "Long Term Monthly Deposit", "productSubType": "DPS", "savingsProductType": "Voluntary and Current Savings",
+        "depositAmount": 1000, "depositAmountWords": "One Thousand", "tenureYears": 3,
+        "maturityAmount": 38880, "monthlyProfitAmount": null, "maturityDate": "2029-09-19",
+        "depositType": "Cash", "memberWantsToPay": "Yes",
+        "nominee1": { "type": "New", "name": "Yasin Ali", "dob": "1980-01-20", "relationship": "Spouse", "idType": "National ID", "idNumber": "1980123456789", "percentage": "100", "phone": "01755667788" },
+        "nominee2": null, "guardian": null,
+        "insuranceInterested": true, "health1": "No", "health2": "No",
+        "policyType": "Single", "premium": 852, "secondInsured": null
+      }
+    },
+    {
+      "id": "SS-4003",
+      "enrollmentId": "2dac9661-4d26-417d-9e96-79d6f44c1234",
+      "memberNo": "MEM-100511",
+      "memberName": "Salma Khatun",
+      "project": "Progoti",
+      "branch": "Savar",
+      "voCode": 2215,
+      "biometric": "No Biometric",
+      "proposedBy": "CO - Habibur Rahman",
+      "requestDate": "2026-09-14",
+      "status": "ERP Approved",
+      "bmApprover": "AM - Nasrin Sultana", "bmComment": "Confirmed with client via branch visit.",
+      "erpApprover": "BAO - Nusrat Jahan", "erpComment": "Consent paper verified and signed.",
+      "formData": {
+        "productName": "Long Term Monthly Deposit", "productSubType": "DPS", "savingsProductType": "Voluntary and Current Savings",
+        "depositAmount": 2000, "depositAmountWords": "Two Thousand", "tenureYears": 10,
+        "maturityAmount": 324000, "monthlyProfitAmount": null, "maturityDate": "2036-09-14",
+        "depositType": "Cash", "memberWantsToPay": "Yes",
+        "nominee1": { "type": "New", "name": "Jamal Uddin", "dob": "2002-11-02", "relationship": "Son", "idType": "Smart Card", "idNumber": "1998774123456", "percentage": "100", "phone": "01822334455" },
+        "nominee2": null, "guardian": null,
+        "insuranceInterested": true, "health1": "No", "health2": "No",
+        "policyType": "Double", "premium": 9088,
+        "secondInsured": { "name": "Karim Mia", "gender": "Male", "relationship": "Husband", "dob": "1978-05-14", "idType": "National ID", "idNumber": "1985674123456" }
+      }
     }
   ]
 }
